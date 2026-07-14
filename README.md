@@ -94,9 +94,3 @@ Las 5 consultas en `consultas.txt` están pensadas para interfaces de usuario
 concretas (buscador de vuelos, detalle de reserva, manifiesto de tripulación,
 dashboard de ingresos por ruta, historial de un cliente). Cada una incluye un
 comentario explicando para qué interfaz sirve y por qué.
-
-## Pendiente
-
-- [x] Índices adicionales sobre columnas de consulta frecuente
-- [x] Script general único que agrupe todo el flujo con comentarios paso a paso
-- [ ] Ejecución y validación contra un PostgreSQL real
