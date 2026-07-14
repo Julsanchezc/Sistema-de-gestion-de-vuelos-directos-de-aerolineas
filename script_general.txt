@@ -32,6 +32,11 @@
 -- IMPORTANTE: si se ejecuta el proyecto usando los archivos por separado (carpeta
 -- de componentes), respetar este mismo orden: proyectoo -> indices -> funciones
 -- -> triggers -> llenado_datos -> consultas.
+--
+-- NOTA DE CORRECCIÓN: telefono_cliente y documento_viajero se definieron como
+-- bigint (no integer) porque un número celular o documento de 10 dígitos supera
+-- el límite de un integer de PostgreSQL (2.147.483.647) y producía el error
+-- "22003 integer out of range" al cargar los datos de prueba.
 -- =============================================================================
 
 -- =============================================================================
@@ -65,6 +70,1538 @@ create sequence seq_cliente start with 1 increment by 1;
 -- el id de cada tabla toma su valor por defecto de la secuencia correspondiente
 -- pais: catálogo de países donde la aerolínea opera ciudades y aeropuertos
 create table pais (
+    id_pais integer default nextval('seq_pais') check (id_pais between 1 and 999),
+    nombre_pais varchar(100)
+);
+
+-- ciudad: ciudades que pertenecen a un país y contienen aeropuertos
+create table ciudad(
+	id_ciudad integer default nextval('seq_ciudad') check (id_ciudad between 1 and 999),
+    nombre_ciudad varchar(100) not null 
+);
+
+-- aeropuerto: aeropuertos ubicados en una ciudad; funcionan como origen/destino de rutas
+create table aeropuerto(
+	id_aeropuerto integer default nextval('seq_aeropuerto') check (id_aeropuerto between 1 and 999),
+	nombre_aeropuerto varchar (100) not null 
+);
+
+-- ruta: trayecto entre un aeropuerto de origen y uno de destino, con su precio base;
+-- una misma ruta puede tener múltiples vuelos (uno por cada fecha/horario)
+create table ruta(
+	id_ruta integer default nextval('seq_ruta') check (id_ruta between 1 and 999),
+	nombre_ruta varchar (100) not null,
+	precio_base numeric (10,2) not null
+);
+
+-- vuelo: instancia concreta de una ruta en una fecha y horario específicos, operada por un avión;
+-- fecha_vuelo se agregó para poder distinguir el mismo horario/ruta en distintos días
+-- (necesario para reservas y para evitar doble asignación de tripulación el mismo día)
+create table vuelo(
+	id_vuelo integer default nextval('seq_vuelo') check (id_vuelo between 1 and 999),
+	fecha_vuelo date not null,
+	hora_salida time not null,
+	hora_llegada time not null, 
+	precio_ajuste numeric (10,2) not null
+);
+
+-- asignacion_tripulacion: tabla intermedia que asigna un tripulante, con un rol específico, a un vuelo
+create table asignacion_tripulacion(
+	id_asignacion_tripulacion integer default nextval('seq_asignacion_tripulacion') check (id_asignacion_tripulacion between 1 and 999),
+	fecha_asignacion date not null
+);
+
+-- tripulante: empleados (pilotos, auxiliares, etc.) que pueden ser asignados a vuelos
+create table tripulante (
+	id_tripulante integer default nextval('seq_tripulante') check (id_tripulante between 1 and 999),
+	nombre_tripulante varchar (100) not null,
+	apellido_tripulante varchar (100) not null,
+	telefono_tripulante varchar (100) not null,
+	correo_tripulante varchar (100) not null,
+	fecha_ingreso_tripulante date not null,
+	fecha_salida_tripulante date,
+	estado_tripulante varchar(100) not null,
+	fecha_nacimiento_tripulante date not null
+);
+
+-- rol_tripulante: catálogo de roles que puede desempeñar un tripulante en un vuelo (piloto, copiloto, auxiliar, etc.)
+create table rol_tripulante (
+	id_rol_tripulante integer default nextval('seq_rol_tripulante') check (id_rol_tripulante between 1 and 999),
+	descripcion_rol_tripulante varchar(100) not null
+);
+
+-- avion: aeronaves de la flota, cada una asociada a un modelo, con su capacidad y estado operativo
+create table avion (
+	id_avion integer default nextval('seq_avion') check (id_avion between 1 and 999),
+	capacidad integer not null,
+	estado varchar (100) not null
+);
+
+-- modelo: catálogo de modelos de avión (ej. Boeing 737, Airbus A320) y su fabricante
+create table modelo(
+	id_modelo integer default nextval('seq_modelo') check (id_modelo between 1 and 999),
+	nombre_modelo varchar(100) not null,
+	fabricante varchar (100) not null
+);
+
+-- reserva: reserva que un cliente hace sobre un vuelo; agrupa uno o más boletos y su pago
+create table reserva (
+	id_reserva integer default nextval('seq_reserva') check (id_reserva between 1 and 999),
+	fecha_reserva date not null,
+	estado_reserva varchar(100) not null
+);
+
+-- pago: pago asociado a una reserva (monto, método y estado del pago)
+create table pago(
+	id_pago integer default nextval('seq_pago') check (id_pago between 1 and 999),
+	monto numeric (10,2) not null,
+	fecha_pago date not null,
+	metodo_pago varchar(100) not null,
+	estado_pago varchar(100) not null
+);
+
+-- boleto: boleto individual dentro de una reserva, con datos del viajero, asiento y clase de viaje
+create table boleto(
+	id_boleto integer default nextval('seq_boleto') check (id_boleto between 1 and 999),
+	asiento int not null,
+	fecha_compra date not null,
+	precio numeric (10,2) not null,
+	nombre_viajero varchar (100) not null,
+	apellido_viajero varchar(100) not null,
+	documento_viajero bigint not null
+);
+
+-- clase: catálogo de clases de viaje (economica, ejecutiva, primera) y su multiplicador sobre el precio base
+create table clase (
+	id_clase integer default nextval('seq_clase') check (id_clase between 1 and 999),
+	descripcion_clase varchar(100) not null,
+	multiplicador numeric(10,2) not null
+);
+
+-- cliente: personas que realizan reservas de vuelos
+create table cliente(
+	id_cliente integer default nextval('seq_cliente') check (id_cliente between 1 and 999),
+	nombre_cliente varchar(100) not null,
+	apellido_cliente varchar(100) not null,
+	telefono_cliente bigint not null,
+	correo_cliente varchar(100) not null
+);
+
+--alterando las tablas se asignan las llaves primarias correspondientes
+
+alter table pais 
+	add primary key (id_pais);
+
+alter table ciudad 
+	add primary key (id_ciudad);
+
+alter table aeropuerto 
+	add primary key (id_aeropuerto);
+
+alter table ruta 
+	add primary key (id_ruta);
+
+alter table vuelo
+	add primary key (id_vuelo);
+
+alter table asignacion_tripulacion 
+	add primary key (id_asignacion_tripulacion);
+
+alter table tripulante 
+	add primary key (id_tripulante);
+
+alter table rol_tripulante 
+	add primary key (id_rol_tripulante);
+
+alter table avion 
+	add primary key (id_avion);
+
+alter table modelo
+	add primary key (id_modelo);
+
+alter table reserva
+	add primary key (id_reserva);
+
+alter table pago 
+	add primary key (id_pago);
+
+alter table boleto 
+	add primary key (id_boleto);
+
+alter table clase
+	add primary key (id_clase);
+
+alter table cliente 
+	add primary key (id_cliente);
+
+--se vincula cada secuencia a la columna que la usa, para que se eliminen juntas y quede claro su propósito
+alter sequence seq_pais owned by pais.id_pais;
+alter sequence seq_ciudad owned by ciudad.id_ciudad;
+alter sequence seq_aeropuerto owned by aeropuerto.id_aeropuerto;
+alter sequence seq_ruta owned by ruta.id_ruta;
+alter sequence seq_vuelo owned by vuelo.id_vuelo;
+alter sequence seq_asignacion_tripulacion owned by asignacion_tripulacion.id_asignacion_tripulacion;
+alter sequence seq_tripulante owned by tripulante.id_tripulante;
+alter sequence seq_rol_tripulante owned by rol_tripulante.id_rol_tripulante;
+alter sequence seq_avion owned by avion.id_avion;
+alter sequence seq_modelo owned by modelo.id_modelo;
+alter sequence seq_reserva owned by reserva.id_reserva;
+alter sequence seq_pago owned by pago.id_pago;
+alter sequence seq_boleto owned by boleto.id_boleto;
+alter sequence seq_clase owned by clase.id_clase;
+alter sequence seq_cliente owned by cliente.id_cliente;
+
+--alterar las tablas y añadir las llaves foráneas correspondientes
+
+alter table ciudad 
+	add column id_pais integer check (id_pais between 1 and 999),
+	add constraint fk_ciudad_pais
+	foreign key (id_pais) REFERENCES pais (id_pais);
+
+
+alter table aeropuerto 
+	add column id_ciudad integer check (id_ciudad between 1 and 999),
+	add constraint fk_aeropuerto_ciudad
+	foreign key (id_ciudad) REFERENCES ciudad (id_ciudad);
+
+alter table ruta 
+	add column id_destino integer check (id_destino between 1 and 999),
+	add column id_origen integer check (id_origen between 1 and 999),
+	add constraint fk_ruta_aeropuerto_destino
+    foreign key (id_destino) references Aeropuerto (Id_aeropuerto),
+    add constraint fk_ruta_aeropuerto_origen
+    foreign key (id_origen) references Aeropuerto (Id_aeropuerto),
+    -- una ruta no puede tener el mismo aeropuerto como origen y destino
+    add constraint chk_ruta_origen_distinto_destino
+    check (id_origen <> id_destino);
+
+alter table vuelo
+	add column id_ruta integer check (id_ruta between 1 and 999),
+	add column id_avion integer check (id_avion between 1 and 999),
+	add constraint fk_ruta_vuelo
+	foreign key (id_ruta) REFERENCES ruta (id_ruta),
+	add constraint fk_avion_vuelo
+	foreign key (id_avion) REFERENCES avion (id_avion);
+
+alter table asignacion_tripulacion 
+	add column id_tripulante integer check (id_tripulante between 1 and 999),
+	add column id_rol_tripulante integer check (id_rol_tripulante between 1 and 999),
+	add column id_vuelo integer check (id_vuelo between 1 and 999),
+	add constraint fk_tripulante_asignacion_tripulacion
+	foreign key (id_tripulante) references tripulante (id_tripulante),
+	add constraint fk_rol_tripulante_asignacion_tripulacion 
+	foreign key (id_rol_tripulante) references rol_tripulante (id_rol_tripulante),
+	add constraint fk_vuelo_asignacion_tripulacion 
+	foreign key (id_vuelo) references vuelo (id_vuelo);
+
+alter table avion 
+	add column id_modelo integer check (id_modelo between 1 and 999),
+	add constraint fk_modelo_avion
+	foreign key (id_modelo) references modelo (id_modelo);
+
+alter table reserva
+	add column id_vuelo integer check (id_vuelo between 1 and 999),
+	add column id_cliente integer check (id_cliente between 1 and 999),
+	add constraint fk_vuelo_reserva
+	foreign key (id_vuelo) references vuelo (id_vuelo),
+	add constraint fk_cliente_reserva
+	foreign key (id_cliente) references cliente (id_cliente);
+
+alter table pago 
+	add column id_reserva integer check (id_reserva between 1 and 999),
+	add constraint fk_reserva_pago
+	foreign key (id_reserva) references reserva (id_reserva);
+
+alter table boleto 
+	add column id_reserva integer check (id_reserva between 1 and 999),
+	add column id_clase integer check (id_clase between 1 and 999),
+	add constraint fk_reserva_boleto
+	foreign key (id_reserva) references reserva (id_reserva),
+	add constraint fk_clase_boleto
+	foreign key (id_clase) references clase (id_clase);
+
+-- =============================================================================
+-- PARTE 2. ÍNDICES ADICIONALES  (indices.txt)
+-- =============================================================================
+
+-- Script: indices.txt
+-- Proyecto: Sistema de Gestión de Vuelos Directos de Aerolíneas (SGVDA)
+-- Índices adicionales sobre columnas de llaves foráneas y columnas que se filtran
+-- u ordenan con frecuencia en las consultas del negocio (ver consultas.txt).
+-- Debe ejecutarse DESPUES de proyectoo.txt (las tablas ya deben existir).
+--
+-- Nota: las llaves primarias ya tienen un índice único automático creado por
+-- PostgreSQL; estos índices adicionales son sobre columnas de llave foránea
+-- (que PostgreSQL NO indexa automáticamente) y sobre columnas usadas en
+-- filtros/joins frecuentes.
+
+set search_path to aerolinea;
+
+-- ===== Búsqueda de vuelos (consulta 1): por ruta, fecha y avión =====
+-- fecha_vuelo se filtra y se ordena en casi cualquier búsqueda de vuelos
+create index idx_vuelo_fecha on vuelo (fecha_vuelo);
+create index idx_vuelo_ruta on vuelo (id_ruta);
+create index idx_vuelo_avion on vuelo (id_avion);
+
+-- ===== Aeropuertos y rutas: joins de origen/destino =====
+create index idx_aeropuerto_ciudad on aeropuerto (id_ciudad);
+create index idx_aeropuerto_nombre on aeropuerto (nombre_aeropuerto);
+create index idx_ruta_origen on ruta (id_origen);
+create index idx_ruta_destino on ruta (id_destino);
+create index idx_ciudad_pais on ciudad (id_pais);
+
+-- ===== Reservas (consultas 2 y 5): por cliente y por vuelo =====
+create index idx_reserva_cliente on reserva (id_cliente);
+create index idx_reserva_vuelo on reserva (id_vuelo);
+create index idx_reserva_estado on reserva (estado_reserva);
+
+-- ===== Boletos (consultas 2 y 4): por reserva y por clase =====
+create index idx_boleto_reserva on boleto (id_reserva);
+create index idx_boleto_clase on boleto (id_clase);
+
+-- ===== Pagos (consultas 4 y 5, y el trigger de la regla 4): por reserva y estado =====
+create index idx_pago_reserva on pago (id_reserva);
+create index idx_pago_estado on pago (estado_pago);
+
+-- ===== Tripulación (consulta 3, y el trigger de la regla 1): por vuelo y tripulante =====
+create index idx_asignacion_vuelo on asignacion_tripulacion (id_vuelo);
+create index idx_asignacion_tripulante on asignacion_tripulacion (id_tripulante);
+
+-- ===== Aviones: por modelo (usado al validar capacidad, regla 3) =====
+create index idx_avion_modelo on avion (id_modelo);
+
+-- =============================================================================
+-- PARTE 3. FUNCIONES DE LAS REGLAS DE NEGOCIO  (funciones.txt)
+-- =============================================================================
+
+-- Script: funciones.txt
+-- Contiene las funciones PL/pgSQL que soportan las reglas de negocio del proyecto
+-- (5 reglas requeridas + 1 regla adicional sobre rutas).
+-- Debe ejecutarse DESPUES de crear el esquema, las secuencias, las tablas y las
+-- llaves foráneas (proyectoo.txt), ya que las funciones consultan esas tablas.
+
+set search_path to aerolinea;
+
+-- =========================================================================
+-- REGLA 1: un tripulante no puede tener dos asignaciones en vuelos cuyos
+-- horarios se traslapen el mismo día (no puede "estar en dos vuelos a la vez")
+-- =========================================================================
+create or replace function fn_validar_asignacion_tripulante()
+returns trigger as $$
+declare
+    v_fecha date;
+    v_salida time;
+    v_llegada time;
+    v_conflictos integer;
+begin
+    -- se obtiene fecha y horario del vuelo al que se quiere asignar el tripulante
+    select fecha_vuelo, hora_salida, hora_llegada
+    into v_fecha, v_salida, v_llegada
+    from vuelo
+    where id_vuelo = new.id_vuelo;
+
+    -- se cuentan otras asignaciones del mismo tripulante, en vuelos de la misma
+    -- fecha, cuyo horario se cruce con el del nuevo vuelo
+    select count(*)
+    into v_conflictos
+    from asignacion_tripulacion at
+    join vuelo v on v.id_vuelo = at.id_vuelo
+    where at.id_tripulante = new.id_tripulante
+      and at.id_asignacion_tripulacion <> coalesce(new.id_asignacion_tripulacion, -1)
+      and v.fecha_vuelo = v_fecha
+      and (v_salida, v_llegada) overlaps (v.hora_salida, v.hora_llegada);
+
+    if v_conflictos > 0 then
+        raise exception 'El tripulante % ya tiene una asignación en un vuelo con horario cruzado el %',
+            new.id_tripulante, v_fecha;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 2: el precio del boleto se calcula automáticamente a partir de la
+-- ruta, el ajuste del vuelo y el multiplicador de la clase; nunca se ingresa
+-- manualmente
+-- =========================================================================
+create or replace function fn_calcular_precio_boleto()
+returns trigger as $$
+declare
+    v_precio_base numeric(10,2);
+    v_precio_ajuste numeric(10,2);
+    v_multiplicador numeric(10,2);
+begin
+    select r.precio_base, v.precio_ajuste
+    into v_precio_base, v_precio_ajuste
+    from reserva res
+    join vuelo v on v.id_vuelo = res.id_vuelo
+    join ruta r on r.id_ruta = v.id_ruta
+    where res.id_reserva = new.id_reserva;
+
+    select multiplicador
+    into v_multiplicador
+    from clase
+    where id_clase = new.id_clase;
+
+    new.precio := (v_precio_base + v_precio_ajuste) * v_multiplicador;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 3: no se puede vender un boleto si ya se alcanzó la capacidad del
+-- avión asignado al vuelo (control de sobreventa)
+-- =========================================================================
+create or replace function fn_validar_capacidad_avion()
+returns trigger as $$
+declare
+    v_id_vuelo integer;
+    v_capacidad integer;
+    v_boletos_vendidos integer;
+begin
+    select res.id_vuelo
+    into v_id_vuelo
+    from reserva res
+    where res.id_reserva = new.id_reserva;
+
+    select av.capacidad
+    into v_capacidad
+    from vuelo v
+    join avion av on av.id_avion = v.id_avion
+    where v.id_vuelo = v_id_vuelo;
+
+    select count(*)
+    into v_boletos_vendidos
+    from boleto b
+    join reserva res on res.id_reserva = b.id_reserva
+    where res.id_vuelo = v_id_vuelo;
+
+    if v_boletos_vendidos >= v_capacidad then
+        raise exception 'No hay cupo disponible: el avión del vuelo % ya alcanzó su capacidad de % asientos',
+            v_id_vuelo, v_capacidad;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 4: al registrarse o actualizarse un pago, el estado de la reserva
+-- se actualiza automáticamente según el estado del pago
+-- =========================================================================
+create or replace function fn_actualizar_estado_reserva()
+returns trigger as $$
+begin
+    if new.estado_pago = 'completado' then
+        update reserva
+        set estado_reserva = 'confirmada'
+        where id_reserva = new.id_reserva;
+    elsif new.estado_pago = 'rechazado' then
+        update reserva
+        set estado_reserva = 'pendiente'
+        where id_reserva = new.id_reserva;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 5: no se puede crear una reserva sobre un vuelo cuya fecha ya pasó
+-- =========================================================================
+create or replace function fn_validar_fecha_vuelo_reserva()
+returns trigger as $$
+declare
+    v_fecha_vuelo date;
+begin
+    select fecha_vuelo
+    into v_fecha_vuelo
+    from vuelo
+    where id_vuelo = new.id_vuelo;
+
+    if v_fecha_vuelo < current_date then
+        raise exception 'No se puede reservar el vuelo %: la fecha del vuelo (%) ya pasó',
+            new.id_vuelo, v_fecha_vuelo;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 6 (adicional): una ruta no puede tener origen y destino en la misma
+-- ciudad, aunque sean aeropuertos distintos (ej. dos aeropuertos de Bogotá)
+-- =========================================================================
+create or replace function fn_validar_ciudades_ruta()
+returns trigger as $$
+declare
+    v_ciudad_origen integer;
+    v_ciudad_destino integer;
+begin
+    select id_ciudad into v_ciudad_origen
+    from aeropuerto
+    where id_aeropuerto = new.id_origen;
+
+    select id_ciudad into v_ciudad_destino
+    from aeropuerto
+    where id_aeropuerto = new.id_destino;
+
+    if v_ciudad_origen = v_ciudad_destino then
+        raise exception 'La ruta % no es válida: el aeropuerto de origen (%) y el de destino (%) están en la misma ciudad',
+            new.id_ruta, new.id_origen, new.id_destino;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+-- =============================================================================
+-- PARTE 4. TRIGGERS DE LAS REGLAS DE NEGOCIO  (triggers.txt)
+-- =============================================================================
+
+-- Script: triggers.txt
+-- Contiene los triggers que activan las funciones definidas en funciones.txt.
+-- Debe ejecutarse DESPUES de proyectoo.txt (esquema/tablas) y funciones.txt.
+
+set search_path to aerolinea;
+
+-- REGLA 1: valida traslape de horario antes de insertar o modificar una asignación
+create trigger trg_validar_asignacion_tripulante
+before insert or update on asignacion_tripulacion
+for each row
+execute function fn_validar_asignacion_tripulante();
+
+-- REGLA 2: calcula el precio del boleto antes de insertarlo
+create trigger trg_calcular_precio_boleto
+before insert on boleto
+for each row
+execute function fn_calcular_precio_boleto();
+
+-- REGLA 3: valida capacidad del avión antes de insertar el boleto
+-- (se ejecuta después de trg_calcular_precio_boleto por orden alfabético de nombre;
+-- si se requiere un orden estricto, se puede renombrar el trigger)
+create trigger trg_validar_capacidad_avion
+before insert on boleto
+for each row
+execute function fn_validar_capacidad_avion();
+
+-- REGLA 4: actualiza el estado de la reserva cuando cambia el estado del pago
+create trigger trg_actualizar_estado_reserva
+after insert or update on pago
+for each row
+execute function fn_actualizar_estado_reserva();
+
+-- REGLA 5: valida que el vuelo de la reserva no tenga fecha pasada
+create trigger trg_validar_fecha_vuelo_reserva
+before insert on reserva
+for each row
+execute function fn_validar_fecha_vuelo_reserva();
+
+-- REGLA 6 (adicional): valida que origen y destino de una ruta no sean la misma ciudad
+create trigger trg_validar_ciudades_ruta
+before insert or update on ruta
+for each row
+execute function fn_validar_ciudades_ruta();
+
+-- =============================================================================
+-- PARTE 5. LLENADO DE DATOS DE PRUEBA  (llenado_datos.txt)
+-- =============================================================================
+
+-- Script: llenado_datos.txt
+-- Datos de prueba para el esquema aerolinea.
+-- 60 registros por tabla, excepto rol_tripulante (6) y clase (4), que son
+-- catálogos con un número de valores naturalmente pequeño y fijo en la vida real
+-- (el enunciado permite menos de 30/60 registros 'en donde sea posible').
+-- Debe ejecutarse DESPUES de proyectoo.txt y funciones.txt/triggers.txt, en ese
+-- orden, ya que varios triggers (precio del boleto, capacidad del avión, estado
+-- de la reserva) se disparan durante estos inserts.
+-- Los id_* no se especifican: cada tabla los genera automáticamente con su
+-- secuencia (nextval), por lo que quedan asignados en el mismo orden de inserción
+-- (1, 2, 3, ... N), que es el que se usa aquí para las llaves foráneas.
+
+set search_path to aerolinea;
+
+-- ===== pais (60) =====
+insert into pais (nombre_pais) values ('Colombia');
+insert into pais (nombre_pais) values ('México');
+insert into pais (nombre_pais) values ('Perú');
+insert into pais (nombre_pais) values ('Chile');
+insert into pais (nombre_pais) values ('Argentina');
+insert into pais (nombre_pais) values ('Brasil');
+insert into pais (nombre_pais) values ('Ecuador');
+insert into pais (nombre_pais) values ('Panamá');
+insert into pais (nombre_pais) values ('Estados Unidos');
+insert into pais (nombre_pais) values ('Canadá');
+insert into pais (nombre_pais) values ('España');
+insert into pais (nombre_pais) values ('Francia');
+insert into pais (nombre_pais) values ('Alemania');
+insert into pais (nombre_pais) values ('Italia');
+insert into pais (nombre_pais) values ('Portugal');
+insert into pais (nombre_pais) values ('Reino Unido');
+insert into pais (nombre_pais) values ('Países Bajos');
+insert into pais (nombre_pais) values ('Suiza');
+insert into pais (nombre_pais) values ('Bélgica');
+insert into pais (nombre_pais) values ('Irlanda');
+insert into pais (nombre_pais) values ('Japón');
+insert into pais (nombre_pais) values ('China');
+insert into pais (nombre_pais) values ('Corea del Sur');
+insert into pais (nombre_pais) values ('India');
+insert into pais (nombre_pais) values ('Tailandia');
+insert into pais (nombre_pais) values ('Singapur');
+insert into pais (nombre_pais) values ('Filipinas');
+insert into pais (nombre_pais) values ('Vietnam');
+insert into pais (nombre_pais) values ('Malasia');
+insert into pais (nombre_pais) values ('Indonesia');
+insert into pais (nombre_pais) values ('Australia');
+insert into pais (nombre_pais) values ('Nueva Zelanda');
+insert into pais (nombre_pais) values ('Emiratos Árabes Unidos');
+insert into pais (nombre_pais) values ('Qatar');
+insert into pais (nombre_pais) values ('Turquía');
+insert into pais (nombre_pais) values ('Egipto');
+insert into pais (nombre_pais) values ('Sudáfrica');
+insert into pais (nombre_pais) values ('Marruecos');
+insert into pais (nombre_pais) values ('Kenia');
+insert into pais (nombre_pais) values ('Nigeria');
+insert into pais (nombre_pais) values ('Costa Rica');
+insert into pais (nombre_pais) values ('Guatemala');
+insert into pais (nombre_pais) values ('Honduras');
+insert into pais (nombre_pais) values ('El Salvador');
+insert into pais (nombre_pais) values ('Nicaragua');
+insert into pais (nombre_pais) values ('República Dominicana');
+insert into pais (nombre_pais) values ('Cuba');
+insert into pais (nombre_pais) values ('Jamaica');
+insert into pais (nombre_pais) values ('Bolivia');
+insert into pais (nombre_pais) values ('Paraguay');
+insert into pais (nombre_pais) values ('Uruguay');
+insert into pais (nombre_pais) values ('Venezuela');
+insert into pais (nombre_pais) values ('Rusia');
+insert into pais (nombre_pais) values ('Polonia');
+insert into pais (nombre_pais) values ('Suecia');
+insert into pais (nombre_pais) values ('Noruega');
+insert into pais (nombre_pais) values ('Dinamarca');
+insert into pais (nombre_pais) values ('Finlandia');
+insert into pais (nombre_pais) values ('Grecia');
+insert into pais (nombre_pais) values ('Austria');
+
+-- ===== ciudad (60), cada una ciudad principal del pais con el mismo id =====
+insert into ciudad (nombre_ciudad, id_pais) values ('Bogotá', 1);
+insert into ciudad (nombre_ciudad, id_pais) values ('Ciudad de México', 2);
+insert into ciudad (nombre_ciudad, id_pais) values ('Lima', 3);
+insert into ciudad (nombre_ciudad, id_pais) values ('Santiago', 4);
+insert into ciudad (nombre_ciudad, id_pais) values ('Buenos Aires', 5);
+insert into ciudad (nombre_ciudad, id_pais) values ('São Paulo', 6);
+insert into ciudad (nombre_ciudad, id_pais) values ('Quito', 7);
+insert into ciudad (nombre_ciudad, id_pais) values ('Ciudad de Panamá', 8);
+insert into ciudad (nombre_ciudad, id_pais) values ('Nueva York', 9);
+insert into ciudad (nombre_ciudad, id_pais) values ('Toronto', 10);
+insert into ciudad (nombre_ciudad, id_pais) values ('Madrid', 11);
+insert into ciudad (nombre_ciudad, id_pais) values ('París', 12);
+insert into ciudad (nombre_ciudad, id_pais) values ('Berlín', 13);
+insert into ciudad (nombre_ciudad, id_pais) values ('Roma', 14);
+insert into ciudad (nombre_ciudad, id_pais) values ('Lisboa', 15);
+insert into ciudad (nombre_ciudad, id_pais) values ('Londres', 16);
+insert into ciudad (nombre_ciudad, id_pais) values ('Ámsterdam', 17);
+insert into ciudad (nombre_ciudad, id_pais) values ('Zúrich', 18);
+insert into ciudad (nombre_ciudad, id_pais) values ('Bruselas', 19);
+insert into ciudad (nombre_ciudad, id_pais) values ('Dublín', 20);
+insert into ciudad (nombre_ciudad, id_pais) values ('Tokio', 21);
+insert into ciudad (nombre_ciudad, id_pais) values ('Shanghái', 22);
+insert into ciudad (nombre_ciudad, id_pais) values ('Seúl', 23);
+insert into ciudad (nombre_ciudad, id_pais) values ('Nueva Delhi', 24);
+insert into ciudad (nombre_ciudad, id_pais) values ('Bangkok', 25);
+insert into ciudad (nombre_ciudad, id_pais) values ('Singapur', 26);
+insert into ciudad (nombre_ciudad, id_pais) values ('Manila', 27);
+insert into ciudad (nombre_ciudad, id_pais) values ('Hanói', 28);
+insert into ciudad (nombre_ciudad, id_pais) values ('Kuala Lumpur', 29);
+insert into ciudad (nombre_ciudad, id_pais) values ('Yakarta', 30);
+insert into ciudad (nombre_ciudad, id_pais) values ('Sídney', 31);
+insert into ciudad (nombre_ciudad, id_pais) values ('Auckland', 32);
+insert into ciudad (nombre_ciudad, id_pais) values ('Dubái', 33);
+insert into ciudad (nombre_ciudad, id_pais) values ('Doha', 34);
+insert into ciudad (nombre_ciudad, id_pais) values ('Estambul', 35);
+insert into ciudad (nombre_ciudad, id_pais) values ('El Cairo', 36);
+insert into ciudad (nombre_ciudad, id_pais) values ('Johannesburgo', 37);
+insert into ciudad (nombre_ciudad, id_pais) values ('Marrakech', 38);
+insert into ciudad (nombre_ciudad, id_pais) values ('Nairobi', 39);
+insert into ciudad (nombre_ciudad, id_pais) values ('Lagos', 40);
+insert into ciudad (nombre_ciudad, id_pais) values ('San José', 41);
+insert into ciudad (nombre_ciudad, id_pais) values ('Ciudad de Guatemala', 42);
+insert into ciudad (nombre_ciudad, id_pais) values ('Tegucigalpa', 43);
+insert into ciudad (nombre_ciudad, id_pais) values ('San Salvador', 44);
+insert into ciudad (nombre_ciudad, id_pais) values ('Managua', 45);
+insert into ciudad (nombre_ciudad, id_pais) values ('Santo Domingo', 46);
+insert into ciudad (nombre_ciudad, id_pais) values ('La Habana', 47);
+insert into ciudad (nombre_ciudad, id_pais) values ('Kingston', 48);
+insert into ciudad (nombre_ciudad, id_pais) values ('La Paz', 49);
+insert into ciudad (nombre_ciudad, id_pais) values ('Asunción', 50);
+insert into ciudad (nombre_ciudad, id_pais) values ('Montevideo', 51);
+insert into ciudad (nombre_ciudad, id_pais) values ('Caracas', 52);
+insert into ciudad (nombre_ciudad, id_pais) values ('Moscú', 53);
+insert into ciudad (nombre_ciudad, id_pais) values ('Varsovia', 54);
+insert into ciudad (nombre_ciudad, id_pais) values ('Estocolmo', 55);
+insert into ciudad (nombre_ciudad, id_pais) values ('Oslo', 56);
+insert into ciudad (nombre_ciudad, id_pais) values ('Copenhague', 57);
+insert into ciudad (nombre_ciudad, id_pais) values ('Helsinki', 58);
+insert into ciudad (nombre_ciudad, id_pais) values ('Atenas', 59);
+insert into ciudad (nombre_ciudad, id_pais) values ('Viena', 60);
+
+-- ===== aeropuerto (60), un aeropuerto principal por ciudad =====
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Bogotá', 1);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Ciudad de México', 2);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Lima', 3);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Santiago', 4);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Buenos Aires', 5);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de São Paulo', 6);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Quito', 7);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Ciudad de Panamá', 8);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Nueva York', 9);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Toronto', 10);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Madrid', 11);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de París', 12);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Berlín', 13);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Roma', 14);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Lisboa', 15);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Londres', 16);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Ámsterdam', 17);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Zúrich', 18);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Bruselas', 19);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Dublín', 20);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Tokio', 21);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Shanghái', 22);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Seúl', 23);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Nueva Delhi', 24);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Bangkok', 25);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Singapur', 26);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Manila', 27);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Hanói', 28);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Kuala Lumpur', 29);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Yakarta', 30);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Sídney', 31);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Auckland', 32);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Dubái', 33);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Doha', 34);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Estambul', 35);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de El Cairo', 36);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Johannesburgo', 37);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Marrakech', 38);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Nairobi', 39);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Lagos', 40);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de San José', 41);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Ciudad de Guatemala', 42);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Tegucigalpa', 43);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de San Salvador', 44);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Managua', 45);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Santo Domingo', 46);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de La Habana', 47);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Kingston', 48);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de La Paz', 49);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Asunción', 50);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Montevideo', 51);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Caracas', 52);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Moscú', 53);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Varsovia', 54);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Estocolmo', 55);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Oslo', 56);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Copenhague', 57);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Helsinki', 58);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Atenas', 59);
+insert into aeropuerto (nombre_aeropuerto, id_ciudad) values ('Aeropuerto Internacional de Viena', 60);
+
+-- ===== modelo (60) =====
+insert into modelo (nombre_modelo, fabricante) values ('737-800', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('737 MAX 8', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('747-400', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('767-300', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('777-200', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('777-300ER', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('787-8', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('787-9', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('757-200', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('737-700', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('A319', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A320', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A320neo', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A321', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A321neo', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A330-200', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A330-300', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A340-600', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A350-900', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A380-800', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('E170', 'Embraer');
+insert into modelo (nombre_modelo, fabricante) values ('E175', 'Embraer');
+insert into modelo (nombre_modelo, fabricante) values ('E190', 'Embraer');
+insert into modelo (nombre_modelo, fabricante) values ('E195', 'Embraer');
+insert into modelo (nombre_modelo, fabricante) values ('E195-E2', 'Embraer');
+insert into modelo (nombre_modelo, fabricante) values ('CRJ700', 'Bombardier');
+insert into modelo (nombre_modelo, fabricante) values ('CRJ900', 'Bombardier');
+insert into modelo (nombre_modelo, fabricante) values ('CRJ1000', 'Bombardier');
+insert into modelo (nombre_modelo, fabricante) values ('Q400', 'Bombardier');
+insert into modelo (nombre_modelo, fabricante) values ('Global 6000', 'Bombardier');
+insert into modelo (nombre_modelo, fabricante) values ('ATR 42-600', 'ATR');
+insert into modelo (nombre_modelo, fabricante) values ('ATR 72-600', 'ATR');
+insert into modelo (nombre_modelo, fabricante) values ('Citation X', 'Cessna');
+insert into modelo (nombre_modelo, fabricante) values ('Citation Sovereign', 'Cessna');
+insert into modelo (nombre_modelo, fabricante) values ('Grand Caravan EX', 'Cessna');
+insert into modelo (nombre_modelo, fabricante) values ('Falcon 900', 'Dassault');
+insert into modelo (nombre_modelo, fabricante) values ('Falcon 2000', 'Dassault');
+insert into modelo (nombre_modelo, fabricante) values ('Superjet 100', 'Sukhoi');
+insert into modelo (nombre_modelo, fabricante) values ('737-800 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('737 MAX 8 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('747-400 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('767-300 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('777-200 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('777-300ER (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('787-8 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('787-9 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('757-200 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('737-700 (B)', 'Boeing');
+insert into modelo (nombre_modelo, fabricante) values ('A319 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A320 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A320neo (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A321 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A321neo (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A330-200 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A330-300 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A340-600 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A350-900 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('A380-800 (B)', 'Airbus');
+insert into modelo (nombre_modelo, fabricante) values ('E170 (B)', 'Embraer');
+insert into modelo (nombre_modelo, fabricante) values ('E175 (B)', 'Embraer');
+
+-- ===== avion (60), un avion por cada modelo =====
+insert into avion (capacidad, estado, id_modelo) values (300, 'activo', 1);
+insert into avion (capacidad, estado, id_modelo) values (280, 'activo', 2);
+insert into avion (capacidad, estado, id_modelo) values (186, 'inactivo', 3);
+insert into avion (capacidad, estado, id_modelo) values (280, 'activo', 4);
+insert into avion (capacidad, estado, id_modelo) values (160, 'activo', 5);
+insert into avion (capacidad, estado, id_modelo) values (320, 'activo', 6);
+insert into avion (capacidad, estado, id_modelo) values (120, 'inactivo', 7);
+insert into avion (capacidad, estado, id_modelo) values (90, 'inactivo', 8);
+insert into avion (capacidad, estado, id_modelo) values (300, 'activo', 9);
+insert into avion (capacidad, estado, id_modelo) values (160, 'activo', 10);
+insert into avion (capacidad, estado, id_modelo) values (350, 'activo', 11);
+insert into avion (capacidad, estado, id_modelo) values (180, 'activo', 12);
+insert into avion (capacidad, estado, id_modelo) values (120, 'activo', 13);
+insert into avion (capacidad, estado, id_modelo) values (160, 'mantenimiento', 14);
+insert into avion (capacidad, estado, id_modelo) values (120, 'activo', 15);
+insert into avion (capacidad, estado, id_modelo) values (200, 'mantenimiento', 16);
+insert into avion (capacidad, estado, id_modelo) values (180, 'activo', 17);
+insert into avion (capacidad, estado, id_modelo) values (220, 'activo', 18);
+insert into avion (capacidad, estado, id_modelo) values (300, 'mantenimiento', 19);
+insert into avion (capacidad, estado, id_modelo) values (186, 'activo', 20);
+insert into avion (capacidad, estado, id_modelo) values (150, 'activo', 21);
+insert into avion (capacidad, estado, id_modelo) values (186, 'activo', 22);
+insert into avion (capacidad, estado, id_modelo) values (186, 'inactivo', 23);
+insert into avion (capacidad, estado, id_modelo) values (160, 'activo', 24);
+insert into avion (capacidad, estado, id_modelo) values (300, 'activo', 25);
+insert into avion (capacidad, estado, id_modelo) values (180, 'activo', 26);
+insert into avion (capacidad, estado, id_modelo) values (320, 'activo', 27);
+insert into avion (capacidad, estado, id_modelo) values (300, 'mantenimiento', 28);
+insert into avion (capacidad, estado, id_modelo) values (300, 'activo', 29);
+insert into avion (capacidad, estado, id_modelo) values (120, 'mantenimiento', 30);
+insert into avion (capacidad, estado, id_modelo) values (280, 'activo', 31);
+insert into avion (capacidad, estado, id_modelo) values (300, 'activo', 32);
+insert into avion (capacidad, estado, id_modelo) values (150, 'activo', 33);
+insert into avion (capacidad, estado, id_modelo) values (240, 'activo', 34);
+insert into avion (capacidad, estado, id_modelo) values (320, 'mantenimiento', 35);
+insert into avion (capacidad, estado, id_modelo) values (160, 'activo', 36);
+insert into avion (capacidad, estado, id_modelo) values (150, 'activo', 37);
+insert into avion (capacidad, estado, id_modelo) values (220, 'activo', 38);
+insert into avion (capacidad, estado, id_modelo) values (200, 'activo', 39);
+insert into avion (capacidad, estado, id_modelo) values (180, 'mantenimiento', 40);
+insert into avion (capacidad, estado, id_modelo) values (300, 'activo', 41);
+insert into avion (capacidad, estado, id_modelo) values (320, 'mantenimiento', 42);
+insert into avion (capacidad, estado, id_modelo) values (240, 'inactivo', 43);
+insert into avion (capacidad, estado, id_modelo) values (160, 'activo', 44);
+insert into avion (capacidad, estado, id_modelo) values (300, 'activo', 45);
+insert into avion (capacidad, estado, id_modelo) values (186, 'activo', 46);
+insert into avion (capacidad, estado, id_modelo) values (350, 'activo', 47);
+insert into avion (capacidad, estado, id_modelo) values (350, 'activo', 48);
+insert into avion (capacidad, estado, id_modelo) values (90, 'mantenimiento', 49);
+insert into avion (capacidad, estado, id_modelo) values (160, 'activo', 50);
+insert into avion (capacidad, estado, id_modelo) values (90, 'activo', 51);
+insert into avion (capacidad, estado, id_modelo) values (350, 'inactivo', 52);
+insert into avion (capacidad, estado, id_modelo) values (186, 'activo', 53);
+insert into avion (capacidad, estado, id_modelo) values (200, 'activo', 54);
+insert into avion (capacidad, estado, id_modelo) values (180, 'activo', 55);
+insert into avion (capacidad, estado, id_modelo) values (120, 'activo', 56);
+insert into avion (capacidad, estado, id_modelo) values (160, 'mantenimiento', 57);
+insert into avion (capacidad, estado, id_modelo) values (280, 'activo', 58);
+insert into avion (capacidad, estado, id_modelo) values (320, 'activo', 59);
+insert into avion (capacidad, estado, id_modelo) values (186, 'activo', 60);
+
+-- ===== ruta (60) =====
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Roma - Ciudad de Guatemala', 257.06, 42, 14);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Auckland - Singapur', 557.97, 26, 32);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Copenhague - Atenas', 623.47, 59, 57);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Ciudad de Guatemala - Yakarta', 920.42, 30, 42);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Toronto - Ámsterdam', 891.0, 17, 10);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nueva York - Londres', 746.87, 16, 9);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Kingston - El Cairo', 692.59, 36, 48);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Estambul - Ámsterdam', 711.75, 17, 35);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Kingston - Marrakech', 451.16, 38, 48);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Hanói - Helsinki', 677.5, 58, 28);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Marrakech - Singapur', 429.94, 26, 38);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nueva Delhi - Lisboa', 866.68, 15, 24);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nueva York - Dubái', 494.73, 33, 9);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Auckland - São Paulo', 325.76, 6, 32);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('La Paz - Santiago', 173.14, 4, 49);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Oslo - Ciudad de Panamá', 137.46, 8, 56);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Toronto - San José', 579.75, 41, 10);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Madrid - Montevideo', 608.41, 51, 11);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('San Salvador - Hanói', 125.97, 28, 44);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nairobi - Buenos Aires', 707.51, 5, 39);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nairobi - Yakarta', 168.87, 30, 39);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Doha - Ámsterdam', 175.94, 17, 34);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('El Cairo - Oslo', 146.07, 56, 36);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Bogotá - San Salvador', 394.26, 44, 1);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('La Habana - Ciudad de Panamá', 546.75, 8, 47);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('San Salvador - Copenhague', 351.14, 57, 44);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Estambul - La Paz', 522.89, 49, 35);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Zúrich - Asunción', 567.56, 50, 18);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Ciudad de Guatemala - Shanghái', 720.38, 22, 42);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Ciudad de Panamá - Bruselas', 852.38, 19, 8);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Hanói - Madrid', 598.26, 11, 28);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Yakarta - Bogotá', 321.69, 1, 30);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('La Habana - Copenhague', 512.57, 57, 47);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('La Habana - Ámsterdam', 457.86, 17, 47);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Dubái - La Paz', 198.29, 49, 33);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('París - Dubái', 666.96, 33, 12);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Atenas - Quito', 414.07, 7, 59);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Oslo - San José', 461.21, 41, 56);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Dublín - Varsovia', 836.98, 54, 20);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('San José - Dubái', 164.96, 33, 41);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nairobi - Berlín', 662.37, 13, 39);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Toronto - Nueva Delhi', 656.33, 24, 10);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('La Paz - Madrid', 170.31, 11, 49);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Estambul - Asunción', 724.42, 50, 35);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Viena - Doha', 784.49, 34, 60);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Atenas - Bogotá', 210.69, 1, 59);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nairobi - Tokio', 279.02, 21, 39);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Auckland - Ciudad de México', 565.12, 2, 32);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Ciudad de Panamá - Viena', 236.35, 60, 8);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nueva Delhi - Copenhague', 272.3, 57, 24);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Varsovia - Caracas', 503.98, 52, 54);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Dublín - Londres', 845.82, 16, 20);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Santiago - Londres', 182.57, 16, 4);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Copenhague - Johannesburgo', 790.66, 37, 57);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('La Habana - Auckland', 830.45, 32, 47);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Moscú - Buenos Aires', 201.26, 5, 53);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('La Paz - Estambul', 661.28, 35, 49);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Asunción - Nueva York', 568.69, 9, 50);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Nueva York - Tegucigalpa', 132.25, 43, 9);
+insert into ruta (nombre_ruta, precio_base, id_destino, id_origen) values ('Sídney - El Cairo', 197.41, 36, 31);
+
+-- ===== rol_tripulante (6 - catálogo con dominio naturalmente pequeño) =====
+insert into rol_tripulante (descripcion_rol_tripulante) values ('Piloto');
+insert into rol_tripulante (descripcion_rol_tripulante) values ('Copiloto');
+insert into rol_tripulante (descripcion_rol_tripulante) values ('Jefe de cabina');
+insert into rol_tripulante (descripcion_rol_tripulante) values ('Auxiliar de vuelo');
+insert into rol_tripulante (descripcion_rol_tripulante) values ('Ingeniero de vuelo');
+insert into rol_tripulante (descripcion_rol_tripulante) values ('Sobrecargo');
+
+-- ===== tripulante (60) =====
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Carlos', 'Gómez', '3131726318', 'carlos.gómez0@aerolinea.com', date '2017-07-16', 'activo', date '1985-04-28');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Ana', 'Rodríguez', '3153826716', 'ana.rodríguez1@aerolinea.com', date '2015-03-13', 'activo', date '1970-07-09');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Luis', 'Martínez', '3161070189', 'luis.martínez2@aerolinea.com', date '2019-07-23', 'activo', date '2000-12-26');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('María', 'López', '3174593961', 'maría.lópez3@aerolinea.com', date '2025-12-16', 'activo', date '1974-04-10');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Jorge', 'García', '3129219319', 'jorge.garcía4@aerolinea.com', date '2015-10-24', 'activo', date '1987-01-24');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Laura', 'Hernández', '3142091325', 'laura.hernández5@aerolinea.com', date '2015-01-19', 'activo', date '1985-09-28');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Andrés', 'Pérez', '3171286543', 'andrés.pérez6@aerolinea.com', date '2017-01-17', 'activo', date '1972-03-03');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Camila', 'Sánchez', '3179864260', 'camila.sánchez7@aerolinea.com', date '2016-11-28', 'activo', date '1977-07-04');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Diego', 'Ramírez', '3176460539', 'diego.ramírez8@aerolinea.com', date '2018-10-20', 'activo', date '1971-10-03');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Valentina', 'Torres', '3156267415', 'valentina.torres9@aerolinea.com', date '2025-10-19', 'activo', date '1986-06-09');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Felipe', 'Flórez', '3127415205', 'felipe.flórez10@aerolinea.com', date '2025-12-11', 'activo', date '1977-05-13');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Daniela', 'Vargas', '3117566185', 'daniela.vargas11@aerolinea.com', date '2025-11-10', 'activo', date '1984-06-25');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Santiago', 'Castro', '3109736572', 'santiago.castro12@aerolinea.com', date '2015-08-20', 'activo', date '1988-02-03');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Paula', 'Ortiz', '3172160068', 'paula.ortiz13@aerolinea.com', date '2018-09-09', 'activo', date '1974-06-03');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Julián', 'Rojas', '3132787299', 'julián.rojas14@aerolinea.com', date '2020-05-06', 'activo', date '1984-09-23');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Natalia', 'Moreno', '3140603163', 'natalia.moreno15@aerolinea.com', date '2024-11-17', 'activo', date '1970-11-27');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Sergio', 'Suárez', '3174437458', 'sergio.suárez16@aerolinea.com', date '2019-11-04', 'activo', date '2000-03-09');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Mariana', 'Muñoz', '3115492573', 'mariana.muñoz17@aerolinea.com', date '2016-12-18', 'activo', date '1974-05-10');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Rafael', 'Jiménez', '3181178885', 'rafael.jiménez18@aerolinea.com', date '2018-12-11', 'activo', date '1976-11-21');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Isabella', 'Reyes', '3135431319', 'isabella.reyes19@aerolinea.com', date '2023-08-09', 'activo', date '1998-01-03');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Miguel', 'Gómez', '3185132217', 'miguel.gómez20@aerolinea.com', date '2021-05-02', 'activo', date '1970-06-25');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Sofía', 'Rodríguez', '3117558317', 'sofía.rodríguez21@aerolinea.com', date '2025-05-06', 'activo', date '1993-08-18');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('David', 'Martínez', '3194713081', 'david.martínez22@aerolinea.com', date '2021-09-01', 'activo', date '1973-02-23');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Gabriela', 'López', '3120005727', 'gabriela.lópez23@aerolinea.com', date '2023-01-27', 'activo', date '1981-10-18');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Alejandro', 'García', '3119876811', 'alejandro.garcía24@aerolinea.com', date '2021-03-02', 'activo', date '1979-06-26');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Carolina', 'Hernández', '3105354599', 'carolina.hernández25@aerolinea.com', date '2020-04-22', 'activo', date '1977-11-04');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Fernando', 'Pérez', '3147469942', 'fernando.pérez26@aerolinea.com', date '2023-07-20', 'activo', date '1993-03-08');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Juliana', 'Sánchez', '3121810617', 'juliana.sánchez27@aerolinea.com', date '2017-07-01', 'activo', date '1975-12-11');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Ricardo', 'Ramírez', '3155259205', 'ricardo.ramírez28@aerolinea.com', date '2025-12-26', 'activo', date '1977-05-06');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Catalina', 'Torres', '3194123965', 'catalina.torres29@aerolinea.com', date '2016-07-28', 'activo', date '1971-08-08');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Carlos', 'Flórez', '3126786211', 'carlos.flórez30@aerolinea.com', date '2022-06-10', 'activo', date '1996-04-08');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Ana', 'Vargas', '3103176186', 'ana.vargas31@aerolinea.com', date '2025-04-13', 'activo', date '1980-05-28');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Luis', 'Castro', '3109317495', 'luis.castro32@aerolinea.com', date '2019-06-21', 'activo', date '1986-07-22');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('María', 'Ortiz', '3171969657', 'maría.ortiz33@aerolinea.com', date '2020-01-04', 'activo', date '1998-05-06');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Jorge', 'Rojas', '3177925434', 'jorge.rojas34@aerolinea.com', date '2019-01-04', 'activo', date '1989-07-12');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Laura', 'Moreno', '3197783662', 'laura.moreno35@aerolinea.com', date '2020-07-20', 'activo', date '1986-02-13');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Andrés', 'Suárez', '3177388337', 'andrés.suárez36@aerolinea.com', date '2018-05-02', 'activo', date '1992-07-01');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Camila', 'Muñoz', '3169782527', 'camila.muñoz37@aerolinea.com', date '2023-11-24', 'activo', date '2000-12-24');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Diego', 'Jiménez', '3190010234', 'diego.jiménez38@aerolinea.com', date '2018-06-14', 'activo', date '1972-11-11');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Valentina', 'Reyes', '3183638503', 'valentina.reyes39@aerolinea.com', date '2020-11-28', 'activo', date '1973-12-10');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Felipe', 'Gómez', '3168064830', 'felipe.gómez40@aerolinea.com', date '2019-11-14', 'activo', date '1980-07-23');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Daniela', 'Rodríguez', '3139682169', 'daniela.rodríguez41@aerolinea.com', date '2023-03-07', 'activo', date '1983-11-13');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Santiago', 'Martínez', '3190908075', 'santiago.martínez42@aerolinea.com', date '2017-10-19', 'activo', date '1979-07-18');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Paula', 'López', '3100054484', 'paula.lópez43@aerolinea.com', date '2019-05-07', 'activo', date '1983-10-20');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Julián', 'García', '3187873101', 'julián.garcía44@aerolinea.com', date '2020-08-15', 'activo', date '1984-11-07');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Natalia', 'Hernández', '3168608612', 'natalia.hernández45@aerolinea.com', date '2022-12-06', 'activo', date '1991-02-10');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Sergio', 'Pérez', '3169182797', 'sergio.pérez46@aerolinea.com', date '2025-11-20', 'activo', date '1980-02-27');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Mariana', 'Sánchez', '3131523529', 'mariana.sánchez47@aerolinea.com', date '2025-05-08', 'activo', date '1995-04-05');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Rafael', 'Ramírez', '3103278320', 'rafael.ramírez48@aerolinea.com', date '2015-04-16', 'activo', date '1989-02-15');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Isabella', 'Torres', '3155625330', 'isabella.torres49@aerolinea.com', date '2025-10-07', 'activo', date '1992-12-13');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Miguel', 'Flórez', '3166354180', 'miguel.flórez50@aerolinea.com', date '2021-04-05', 'activo', date '1990-12-01');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Sofía', 'Vargas', '3114305904', 'sofía.vargas51@aerolinea.com', date '2021-04-06', 'activo', date '1995-12-17');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('David', 'Castro', '3162350830', 'david.castro52@aerolinea.com', date '2015-09-08', 'activo', date '1999-02-15');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Gabriela', 'Ortiz', '3117896471', 'gabriela.ortiz53@aerolinea.com', date '2022-11-17', 'activo', date '1987-10-11');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Alejandro', 'Rojas', '3159401199', 'alejandro.rojas54@aerolinea.com', date '2024-12-17', 'activo', date '1983-09-15');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Carolina', 'Moreno', '3121361812', 'carolina.moreno55@aerolinea.com', date '2022-08-09', 'activo', date '1994-04-27');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Fernando', 'Suárez', '3185585469', 'fernando.suárez56@aerolinea.com', date '2019-09-16', 'activo', date '1990-04-09');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Juliana', 'Muñoz', '3159038700', 'juliana.muñoz57@aerolinea.com', date '2016-12-10', 'activo', date '1977-05-11');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Ricardo', 'Jiménez', '3142910691', 'ricardo.jiménez58@aerolinea.com', date '2023-02-05', 'activo', date '1974-04-13');
+insert into tripulante (nombre_tripulante, apellido_tripulante, telefono_tripulante, correo_tripulante, fecha_ingreso_tripulante, estado_tripulante, fecha_nacimiento_tripulante) values ('Catalina', 'Reyes', '3193140367', 'catalina.reyes59@aerolinea.com', date '2017-12-07', 'activo', date '1972-07-14');
+
+-- ===== vuelo (60), un vuelo por cada ruta =====
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-11', time '15:45:00', time '19:00:00', 50.42, 1, 54);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-30', time '05:45:00', time '09:00:00', 90.42, 2, 20);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-19', time '18:15:00', time '22:15:00', 58.28, 3, 28);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-31', time '17:30:00', time '21:15:00', 110.34, 4, 30);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-06', time '05:45:00', time '06:00:00', 16.28, 5, 28);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-02', time '19:15:00', time '20:30:00', 25.4, 6, 21);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-20', time '15:30:00', time '19:30:00', 50.59, 7, 54);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-29', time '07:45:00', time '08:00:00', 78.02, 8, 15);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-31', time '06:00:00', time '08:15:00', 74.56, 9, 2);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-26', time '12:15:00', time '16:00:00', 55.8, 10, 14);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-23', time '13:30:00', time '15:00:00', 19.65, 11, 53);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-27', time '14:00:00', time '15:30:00', 108.96, 12, 44);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-29', time '17:45:00', time '19:00:00', 99.67, 13, 45);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-25', time '12:00:00', time '15:00:00', 93.92, 14, 37);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-18', time '16:45:00', time '19:00:00', 40.95, 15, 42);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-31', time '18:45:00', time '19:45:00', 106.99, 16, 41);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-17', time '19:15:00', time '23:15:00', 115.86, 17, 34);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-29', time '13:45:00', time '17:45:00', 71.1, 18, 47);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-11-05', time '15:15:00', time '16:30:00', 29.26, 19, 29);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-17', time '19:45:00', time '22:00:00', 39.0, 20, 55);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-28', time '20:15:00', time '23:30:00', 105.64, 21, 18);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-15', time '13:00:00', time '15:00:00', 48.77, 22, 47);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-25', time '12:45:00', time '16:45:00', 11.17, 23, 2);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-08', time '12:45:00', time '14:30:00', 44.28, 24, 38);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-13', time '16:45:00', time '19:30:00', 32.51, 25, 30);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-25', time '13:15:00', time '14:15:00', 89.15, 26, 8);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-20', time '10:15:00', time '12:45:00', 70.75, 27, 47);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-14', time '14:00:00', time '16:30:00', 21.53, 28, 24);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-07-22', time '05:15:00', time '08:00:00', 35.06, 29, 36);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-27', time '09:45:00', time '10:00:00', 56.33, 30, 19);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-17', time '19:30:00', time '21:00:00', 57.33, 31, 56);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-27', time '07:45:00', time '11:00:00', 82.37, 32, 41);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-16', time '09:15:00', time '12:00:00', 66.97, 33, 8);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-11-09', time '18:15:00', time '22:45:00', 35.68, 34, 29);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-21', time '18:30:00', time '19:00:00', 75.06, 35, 14);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-07', time '13:00:00', time '15:15:00', 9.01, 36, 36);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-22', time '05:45:00', time '09:45:00', 27.78, 37, 3);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-18', time '14:45:00', time '15:15:00', 94.95, 38, 51);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-06', time '11:45:00', time '12:15:00', 109.01, 39, 10);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-25', time '09:00:00', time '10:15:00', 71.41, 40, 20);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-12', time '14:45:00', time '15:45:00', 83.97, 41, 20);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-30', time '13:45:00', time '17:00:00', 106.73, 42, 3);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-14', time '15:30:00', time '16:00:00', 100.32, 43, 44);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-14', time '05:30:00', time '06:15:00', 78.18, 44, 34);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-07-27', time '13:15:00', time '17:45:00', 41.76, 45, 31);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-27', time '15:30:00', time '16:15:00', 83.24, 46, 27);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-07-27', time '14:45:00', time '15:45:00', 30.29, 47, 21);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-06', time '08:45:00', time '09:45:00', 22.51, 48, 4);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-11', time '16:45:00', time '20:00:00', 65.91, 49, 18);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-07-19', time '14:45:00', time '18:00:00', 73.06, 50, 41);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-24', time '12:15:00', time '15:00:00', 11.19, 51, 27);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-17', time '08:45:00', time '09:15:00', 85.99, 52, 60);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-16', time '13:45:00', time '17:45:00', 66.15, 53, 30);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-20', time '17:15:00', time '19:00:00', 94.8, 54, 50);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-21', time '18:30:00', time '21:00:00', 35.83, 55, 47);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-08-29', time '20:15:00', time '23:45:00', 66.23, 56, 22);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-13', time '17:45:00', time '20:15:00', 68.62, 57, 16);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-10-19', time '12:45:00', time '13:30:00', 84.63, 58, 31);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-07-20', time '17:45:00', time '19:45:00', 60.27, 59, 9);
+insert into vuelo (fecha_vuelo, hora_salida, hora_llegada, precio_ajuste, id_ruta, id_avion) values (date '2026-09-21', time '15:00:00', time '19:00:00', 54.83, 60, 59);
+
+-- ===== cliente (60) =====
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Camila', 'López', 3154785699, 'camila.lópez.cliente0@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Diego', 'García', 3440211187, 'diego.garcía.cliente1@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Valentina', 'Hernández', 3165744099, 'valentina.hernández.cliente2@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Felipe', 'Pérez', 3080346223, 'felipe.pérez.cliente3@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Daniela', 'Sánchez', 3504111692, 'daniela.sánchez.cliente4@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Santiago', 'Ramírez', 3284566044, 'santiago.ramírez.cliente5@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Paula', 'Torres', 3363527356, 'paula.torres.cliente6@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Julián', 'Flórez', 3426794469, 'julián.flórez.cliente7@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Natalia', 'Vargas', 3086237917, 'natalia.vargas.cliente8@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Sergio', 'Castro', 3352794611, 'sergio.castro.cliente9@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Mariana', 'Ortiz', 3572972597, 'mariana.ortiz.cliente10@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Rafael', 'Rojas', 3408031980, 'rafael.rojas.cliente11@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Isabella', 'Moreno', 3340012324, 'isabella.moreno.cliente12@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Miguel', 'Suárez', 3523929617, 'miguel.suárez.cliente13@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Sofía', 'Muñoz', 3580911523, 'sofía.muñoz.cliente14@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('David', 'Jiménez', 3038546365, 'david.jiménez.cliente15@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Gabriela', 'Reyes', 3073466219, 'gabriela.reyes.cliente16@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Alejandro', 'Gómez', 3252082631, 'alejandro.gómez.cliente17@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Carolina', 'Rodríguez', 3308570854, 'carolina.rodríguez.cliente18@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Fernando', 'Martínez', 3244261532, 'fernando.martínez.cliente19@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Juliana', 'López', 3097044071, 'juliana.lópez.cliente20@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Ricardo', 'García', 3465973314, 'ricardo.garcía.cliente21@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Catalina', 'Hernández', 3105702499, 'catalina.hernández.cliente22@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Carlos', 'Pérez', 3107918827, 'carlos.pérez.cliente23@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Ana', 'Sánchez', 3476396216, 'ana.sánchez.cliente24@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Luis', 'Ramírez', 3178632824, 'luis.ramírez.cliente25@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('María', 'Torres', 3321549249, 'maría.torres.cliente26@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Jorge', 'Flórez', 3031081879, 'jorge.flórez.cliente27@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Laura', 'Vargas', 3049382425, 'laura.vargas.cliente28@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Andrés', 'Castro', 3348294647, 'andrés.castro.cliente29@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Camila', 'Ortiz', 3060257560, 'camila.ortiz.cliente30@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Diego', 'Rojas', 3315001254, 'diego.rojas.cliente31@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Valentina', 'Moreno', 3384897084, 'valentina.moreno.cliente32@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Felipe', 'Suárez', 3402482554, 'felipe.suárez.cliente33@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Daniela', 'Muñoz', 3462446417, 'daniela.muñoz.cliente34@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Santiago', 'Jiménez', 3156304376, 'santiago.jiménez.cliente35@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Paula', 'Reyes', 3262204999, 'paula.reyes.cliente36@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Julián', 'Gómez', 3570335494, 'julián.gómez.cliente37@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Natalia', 'Rodríguez', 3442437192, 'natalia.rodríguez.cliente38@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Sergio', 'Martínez', 3193334613, 'sergio.martínez.cliente39@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Mariana', 'López', 3182518553, 'mariana.lópez.cliente40@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Rafael', 'García', 3187979290, 'rafael.garcía.cliente41@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Isabella', 'Hernández', 3084791618, 'isabella.hernández.cliente42@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Miguel', 'Pérez', 3410753814, 'miguel.pérez.cliente43@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Sofía', 'Sánchez', 3258589021, 'sofía.sánchez.cliente44@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('David', 'Ramírez', 3534366139, 'david.ramírez.cliente45@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Gabriela', 'Torres', 3153671484, 'gabriela.torres.cliente46@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Alejandro', 'Flórez', 3249310440, 'alejandro.flórez.cliente47@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Carolina', 'Vargas', 3495155950, 'carolina.vargas.cliente48@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Fernando', 'Castro', 3272706093, 'fernando.castro.cliente49@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Juliana', 'Ortiz', 3493460064, 'juliana.ortiz.cliente50@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Ricardo', 'Rojas', 3274154962, 'ricardo.rojas.cliente51@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Catalina', 'Moreno', 3010090412, 'catalina.moreno.cliente52@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Carlos', 'Suárez', 3499561877, 'carlos.suárez.cliente53@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Ana', 'Muñoz', 3308842146, 'ana.muñoz.cliente54@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Luis', 'Jiménez', 3586905284, 'luis.jiménez.cliente55@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('María', 'Reyes', 3169625036, 'maría.reyes.cliente56@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Jorge', 'Gómez', 3079308612, 'jorge.gómez.cliente57@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Laura', 'Rodríguez', 3474303740, 'laura.rodríguez.cliente58@correo.com');
+insert into cliente (nombre_cliente, apellido_cliente, telefono_cliente, correo_cliente) values ('Andrés', 'Martínez', 3371048258, 'andrés.martínez.cliente59@correo.com');
+
+-- ===== clase (4 - catálogo con dominio naturalmente pequeño) =====
+insert into clase (descripcion_clase, multiplicador) values ('Económica', 1.0);
+insert into clase (descripcion_clase, multiplicador) values ('Económica premium', 1.3);
+insert into clase (descripcion_clase, multiplicador) values ('Ejecutiva', 1.8);
+insert into clase (descripcion_clase, multiplicador) values ('Primera clase', 2.5);
+
+-- ===== asignacion_tripulacion (60) =====
+-- se arman 15 tripulaciones completas (piloto, copiloto, jefe de cabina, auxiliar)
+-- para los primeros 15 vuelos; cada tripulante aparece en una sola asignación,
+-- por lo que no hay riesgo de traslape de horario (regla de negocio 1).
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 1, 1, 1);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 2, 2, 1);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-06', 3, 3, 1);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 4, 4, 1);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-05', 5, 1, 2);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 6, 2, 2);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-09', 7, 3, 2);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-06', 8, 4, 2);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-05', 9, 1, 3);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-11', 10, 2, 3);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-09', 11, 3, 3);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-06', 12, 4, 3);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 13, 1, 4);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-07', 14, 2, 4);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 15, 3, 4);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 16, 4, 4);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 17, 1, 5);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-12', 18, 2, 5);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-06', 19, 3, 5);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 20, 4, 5);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-12', 21, 1, 6);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 22, 2, 6);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-12', 23, 3, 6);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 24, 4, 6);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-05', 25, 1, 7);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 26, 2, 7);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-09', 27, 3, 7);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 28, 4, 7);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-07', 29, 1, 8);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-09', 30, 2, 8);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-09', 31, 3, 8);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 32, 4, 8);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 33, 1, 9);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-10', 34, 2, 9);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-11', 35, 3, 9);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-12', 36, 4, 9);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 37, 1, 10);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-05', 38, 2, 10);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-12', 39, 3, 10);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-03', 40, 4, 10);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-07', 41, 1, 11);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-10', 42, 2, 11);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-11', 43, 3, 11);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 44, 4, 11);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-07', 45, 1, 12);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-06', 46, 2, 12);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-10', 47, 3, 12);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-09', 48, 4, 12);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-10', 49, 1, 13);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-04', 50, 2, 13);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-07', 51, 3, 13);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-04', 52, 4, 13);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-04', 53, 1, 14);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 54, 2, 14);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-10', 55, 3, 14);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 56, 4, 14);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-05', 57, 1, 15);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-08', 58, 2, 15);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-07', 59, 3, 15);
+insert into asignacion_tripulacion (fecha_asignacion, id_tripulante, id_rol_tripulante, id_vuelo) values (date '2026-07-11', 60, 4, 15);
+
+-- ===== reserva (60), una por cada cliente =====
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-11', 'pendiente', 30, 1);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-06', 'pendiente', 10, 2);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-01', 'pendiente', 56, 3);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-02', 'pendiente', 55, 4);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-01', 'pendiente', 6, 5);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-05', 'pendiente', 1, 6);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-10', 'pendiente', 35, 7);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-02', 'pendiente', 30, 8);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-05', 'pendiente', 44, 9);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-01', 'pendiente', 38, 10);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-02', 'pendiente', 53, 11);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-06', 'pendiente', 7, 12);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-13', 'pendiente', 31, 13);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-03', 'pendiente', 40, 14);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-06', 'pendiente', 59, 15);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-11', 'pendiente', 42, 16);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-29', 'pendiente', 41, 17);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-04', 'pendiente', 59, 18);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-30', 'pendiente', 42, 19);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-09', 'pendiente', 8, 20);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-12', 'pendiente', 3, 21);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-28', 'pendiente', 20, 22);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-10', 'pendiente', 8, 23);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-09', 'pendiente', 16, 24);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-29', 'pendiente', 25, 25);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-30', 'pendiente', 24, 26);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-09', 'pendiente', 38, 27);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-30', 'pendiente', 57, 28);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-10', 'pendiente', 42, 29);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-28', 'pendiente', 54, 30);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-30', 'pendiente', 40, 31);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-12', 'pendiente', 18, 32);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-02', 'pendiente', 45, 33);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-29', 'pendiente', 14, 34);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-06', 'pendiente', 29, 35);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-02', 'pendiente', 55, 36);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-02', 'pendiente', 7, 37);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-02', 'pendiente', 35, 38);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-01', 'pendiente', 4, 39);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-07', 'pendiente', 18, 40);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-06-29', 'pendiente', 8, 41);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-07', 'pendiente', 6, 42);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-13', 'pendiente', 42, 43);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-03', 'pendiente', 4, 44);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-09', 'pendiente', 16, 45);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-07', 'pendiente', 51, 46);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-07', 'pendiente', 5, 47);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-07', 'pendiente', 38, 48);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-06', 'pendiente', 53, 49);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-09', 'pendiente', 22, 50);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-13', 'pendiente', 51, 51);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-09', 'pendiente', 18, 52);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-05', 'pendiente', 9, 53);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-08', 'pendiente', 52, 54);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-13', 'pendiente', 8, 55);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-13', 'pendiente', 9, 56);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-06', 'pendiente', 23, 57);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-03', 'pendiente', 38, 58);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-08', 'pendiente', 2, 59);
+insert into reserva (fecha_reserva, estado_reserva, id_vuelo, id_cliente) values (date '2026-07-12', 'pendiente', 17, 60);
+
+-- ===== pago (60), un pago por cada reserva =====
+-- la mayoría queda 'completado' (dispara el trigger que confirma la reserva);
+-- algunos quedan 'pendiente' o 'rechazado' para demostrar los distintos casos
+-- de la regla de negocio 4.
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1260.11, date '2026-06-30', 'pse', 'completado', 1);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1184.27, date '2026-07-01', 'efectivo', 'completado', 2);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1062.02, date '2026-07-03', 'efectivo', 'completado', 3);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (540.65, date '2026-07-05', 'pse', 'completado', 4);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1341.99, date '2026-06-28', 'tarjeta_credito', 'completado', 5);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (264.03, date '2026-07-11', 'tarjeta_credito', 'completado', 6);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (689.85, date '2026-07-02', 'tarjeta_debito', 'completado', 7);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (845.46, date '2026-07-03', 'tarjeta_credito', 'rechazado', 8);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (663.51, date '2026-06-30', 'tarjeta_credito', 'completado', 9);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1360.5, date '2026-07-04', 'pse', 'completado', 10);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (279.5, date '2026-07-07', 'tarjeta_debito', 'completado', 11);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (970.92, date '2026-07-06', 'tarjeta_credito', 'rechazado', 12);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (587.64, date '2026-07-02', 'tarjeta_credito', 'completado', 13);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1103.26, date '2026-07-06', 'efectivo', 'completado', 14);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1206.44, date '2026-07-13', 'pse', 'completado', 15);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (186.19, date '2026-07-05', 'pse', 'completado', 16);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1301.92, date '2026-07-02', 'tarjeta_credito', 'completado', 17);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (376.76, date '2026-07-09', 'efectivo', 'completado', 18);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (236.98, date '2026-07-13', 'tarjeta_credito', 'completado', 19);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1082.64, date '2026-07-07', 'efectivo', 'completado', 20);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (674.79, date '2026-07-03', 'tarjeta_debito', 'rechazado', 21);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (612.57, date '2026-07-03', 'tarjeta_credito', 'pendiente', 22);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1254.18, date '2026-07-09', 'tarjeta_debito', 'rechazado', 23);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1093.04, date '2026-07-12', 'tarjeta_credito', 'pendiente', 24);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (490.13, date '2026-06-30', 'efectivo', 'completado', 25);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (908.85, date '2026-06-30', 'pse', 'completado', 26);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (419.46, date '2026-07-10', 'pse', 'completado', 27);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (687.39, date '2026-07-04', 'efectivo', 'completado', 28);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (808.67, date '2026-07-04', 'tarjeta_credito', 'completado', 29);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (425.65, date '2026-07-12', 'tarjeta_credito', 'completado', 30);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (405.53, date '2026-07-07', 'tarjeta_debito', 'completado', 31);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1105.2, date '2026-07-04', 'pse', 'completado', 32);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (299.98, date '2026-06-28', 'efectivo', 'pendiente', 33);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (369.62, date '2026-07-01', 'tarjeta_debito', 'completado', 34);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (775.33, date '2026-07-02', 'tarjeta_credito', 'completado', 35);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (646.34, date '2026-07-12', 'efectivo', 'pendiente', 36);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (173.43, date '2026-07-11', 'pse', 'completado', 37);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (869.7, date '2026-07-01', 'efectivo', 'completado', 38);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (511.89, date '2026-07-01', 'tarjeta_credito', 'completado', 39);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1357.75, date '2026-07-08', 'efectivo', 'completado', 40);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1190.03, date '2026-07-02', 'tarjeta_credito', 'rechazado', 41);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (695.89, date '2026-07-10', 'tarjeta_debito', 'completado', 42);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (694.6, date '2026-07-01', 'tarjeta_credito', 'completado', 43);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (644.71, date '2026-07-04', 'pse', 'completado', 44);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (426.97, date '2026-07-08', 'tarjeta_credito', 'pendiente', 45);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (788.1, date '2026-07-10', 'tarjeta_debito', 'pendiente', 46);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1282.4, date '2026-07-02', 'pse', 'completado', 47);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1059.22, date '2026-07-09', 'tarjeta_debito', 'completado', 48);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (278.51, date '2026-07-05', 'tarjeta_debito', 'completado', 49);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (366.87, date '2026-07-09', 'tarjeta_credito', 'completado', 50);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (371.43, date '2026-06-28', 'efectivo', 'pendiente', 51);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1093.06, date '2026-06-29', 'pse', 'completado', 52);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (1230.31, date '2026-07-03', 'tarjeta_debito', 'completado', 53);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (699.7, date '2026-06-28', 'efectivo', 'completado', 54);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (939.23, date '2026-07-05', 'tarjeta_credito', 'rechazado', 55);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (589.93, date '2026-07-11', 'pse', 'completado', 56);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (727.18, date '2026-07-12', 'tarjeta_credito', 'completado', 57);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (610.92, date '2026-07-04', 'tarjeta_credito', 'completado', 58);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (955.83, date '2026-07-11', 'efectivo', 'pendiente', 59);
+insert into pago (monto, fecha_pago, metodo_pago, estado_pago, id_reserva) values (728.39, date '2026-07-12', 'efectivo', 'completado', 60);
+
+-- ===== boleto (60), un boleto por cada reserva =====
+-- el valor de 'precio' que se envía aquí es un valor de referencia; el trigger
+-- trg_calcular_precio_boleto lo recalcula automáticamente antes de insertar
+-- (regla de negocio 2), así que el valor final en la tabla puede diferir de este.
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (59, date '2026-07-07', 0, 'Santiago', 'Pérez', 1839066436, 1, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (39, date '2026-07-09', 0, 'Paula', 'Sánchez', 1121405554, 2, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (29, date '2026-07-03', 0, 'Julián', 'Ramírez', 322268589, 3, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (33, date '2026-07-08', 0, 'Natalia', 'Torres', 1487547363, 4, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (16, date '2026-06-29', 0, 'Sergio', 'Flórez', 1619606038, 5, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (34, date '2026-07-08', 0, 'Mariana', 'Vargas', 1222592851, 6, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (24, date '2026-07-01', 0, 'Rafael', 'Castro', 707509343, 7, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (50, date '2026-07-12', 0, 'Isabella', 'Ortiz', 826637913, 8, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (5, date '2026-07-10', 0, 'Miguel', 'Rojas', 808005516, 9, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (19, date '2026-07-09', 0, 'Sofía', 'Moreno', 641156828, 10, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (6, date '2026-07-09', 0, 'David', 'Suárez', 1351423581, 11, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (20, date '2026-07-01', 0, 'Gabriela', 'Muñoz', 1508866777, 12, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (39, date '2026-07-11', 0, 'Alejandro', 'Jiménez', 1622209455, 13, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (36, date '2026-07-03', 0, 'Carolina', 'Reyes', 908912654, 14, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (43, date '2026-07-11', 0, 'Fernando', 'Gómez', 1609317800, 15, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (33, date '2026-07-13', 0, 'Juliana', 'Rodríguez', 877019924, 16, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (20, date '2026-07-07', 0, 'Ricardo', 'Martínez', 487111671, 17, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (50, date '2026-07-07', 0, 'Catalina', 'López', 1144258855, 18, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (9, date '2026-07-11', 0, 'Carlos', 'García', 432742238, 19, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (55, date '2026-07-10', 0, 'Ana', 'Hernández', 1792475188, 20, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (43, date '2026-07-09', 0, 'Luis', 'Pérez', 823195978, 21, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (10, date '2026-07-08', 0, 'María', 'Sánchez', 448423232, 22, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (47, date '2026-07-12', 0, 'Jorge', 'Ramírez', 1039896495, 23, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (24, date '2026-07-06', 0, 'Laura', 'Torres', 1552478306, 24, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (40, date '2026-06-29', 0, 'Andrés', 'Flórez', 711878070, 25, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (35, date '2026-07-04', 0, 'Camila', 'Vargas', 613610433, 26, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (58, date '2026-07-07', 0, 'Diego', 'Castro', 1893392355, 27, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (44, date '2026-06-29', 0, 'Valentina', 'Ortiz', 1324966316, 28, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (50, date '2026-07-01', 0, 'Felipe', 'Rojas', 705100176, 29, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (11, date '2026-07-07', 0, 'Daniela', 'Moreno', 1854260576, 30, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (56, date '2026-07-12', 0, 'Santiago', 'Suárez', 636877816, 31, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (56, date '2026-07-10', 0, 'Paula', 'Muñoz', 897171922, 32, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (19, date '2026-07-08', 0, 'Julián', 'Jiménez', 280120452, 33, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (29, date '2026-07-09', 0, 'Natalia', 'Reyes', 1202416611, 34, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (6, date '2026-06-29', 0, 'Sergio', 'Gómez', 576822989, 35, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (60, date '2026-06-30', 0, 'Mariana', 'Rodríguez', 157273801, 36, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (26, date '2026-07-02', 0, 'Rafael', 'Martínez', 1178052068, 37, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (25, date '2026-07-02', 0, 'Isabella', 'López', 275246342, 38, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (2, date '2026-07-10', 0, 'Miguel', 'García', 784370545, 39, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (51, date '2026-07-09', 0, 'Sofía', 'Hernández', 413638497, 40, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (19, date '2026-06-28', 0, 'David', 'Pérez', 1881899438, 41, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (49, date '2026-06-28', 0, 'Gabriela', 'Sánchez', 1615127398, 42, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (40, date '2026-07-11', 0, 'Alejandro', 'Ramírez', 111276849, 43, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (17, date '2026-07-09', 0, 'Carolina', 'Torres', 563115030, 44, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (8, date '2026-07-04', 0, 'Fernando', 'Flórez', 1766818035, 45, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (20, date '2026-07-12', 0, 'Juliana', 'Vargas', 361667330, 46, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (27, date '2026-06-29', 0, 'Ricardo', 'Castro', 1472138392, 47, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (8, date '2026-06-28', 0, 'Catalina', 'Ortiz', 1896773184, 48, 1);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (41, date '2026-07-06', 0, 'Carlos', 'Rojas', 1206760953, 49, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (19, date '2026-07-13', 0, 'Ana', 'Moreno', 1021783504, 50, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (16, date '2026-06-30', 0, 'Luis', 'Suárez', 1325491002, 51, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (43, date '2026-07-11', 0, 'María', 'Muñoz', 1534980583, 52, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (5, date '2026-07-13', 0, 'Jorge', 'Jiménez', 1229704051, 53, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (56, date '2026-07-12', 0, 'Laura', 'Reyes', 1109607400, 54, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (24, date '2026-07-13', 0, 'Andrés', 'Gómez', 644709786, 55, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (51, date '2026-07-02', 0, 'Camila', 'Rodríguez', 245083043, 56, 2);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (47, date '2026-07-10', 0, 'Diego', 'Martínez', 1511120948, 57, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (9, date '2026-07-02', 0, 'Valentina', 'López', 195210161, 58, 3);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (53, date '2026-07-08', 0, 'Felipe', 'García', 1480393080, 59, 4);
+insert into boleto (asiento, fecha_compra, precio, nombre_viajero, apellido_viajero, documento_viajero, id_reserva, id_clase) values (45, date '2026-07-08', 0, 'Daniela', 'Hernández', 1127637871, 60, 2);
+
+-- =============================================================================
+-- PARTE 6. CONSULTAS DQL QUE SOPORTAN EL NEGOCIO  (consultas.txt)
+-- =============================================================================
+
+-- Script: consultas.txt
+-- 5 consultas DQL que soportan interfaces de usuario reales del negocio.
+-- Debe ejecutarse DESPUES de tener el esquema, las tablas y datos cargados.
+
+set search_path to aerolinea;
+
+-- =========================================================================
+-- CONSULTA 1: Buscador de vuelos disponibles
+-- Interfaz: pantalla de búsqueda de vuelos que ve el cliente (ej. "Bogotá -> Medellín,
+-- 20 de julio"), donde se listan los vuelos disponibles con horario, precio y cupo.
+-- Por qué: es la consulta central de cualquier aerolínea; el cliente necesita ver
+-- qué vuelos existen para una ruta/fecha, con asientos disponibles y precio.
+-- =========================================================================
+select
+    v.id_vuelo,
+    ao.nombre_aeropuerto as aeropuerto_origen,
+    ad.nombre_aeropuerto as aeropuerto_destino,
+    v.fecha_vuelo,
+    v.hora_salida,
+    v.hora_llegada,
+    r.precio_base + v.precio_ajuste as precio_base_vuelo,
+    av.capacidad as capacidad_avion,
+    av.capacidad - coalesce(count(b.id_boleto), 0) as asientos_disponibles
+from vuelo v
+join ruta r on r.id_ruta = v.id_ruta
+join aeropuerto ao on ao.id_aeropuerto = r.id_origen
+join aeropuerto ad on ad.id_aeropuerto = r.id_destino
+join avion av on av.id_avion = v.id_avion
+left join reserva res on res.id_vuelo = v.id_vuelo
+left join boleto b on b.id_reserva = res.id_reserva
+where ao.nombre_aeropuerto = 'El Dorado'          -- parámetro: aeropuerto de origen elegido por el cliente
+  and ad.nombre_aeropuerto = 'José María Córdova'  -- parámetro: aeropuerto de destino elegido por el cliente
+  and v.fecha_vuelo = date '2026-08-20'            -- parámetro: fecha elegida por el cliente
+group by v.id_vuelo, ao.nombre_aeropuerto, ad.nombre_aeropuerto, v.fecha_vuelo,
+         v.hora_salida, v.hora_llegada, r.precio_base, v.precio_ajuste, av.capacidad
+having av.capacidad - coalesce(count(b.id_boleto), 0) > 0   -- solo vuelos con cupo
+order by v.hora_salida;
+
+
+-- =========================================================================
+-- CONSULTA 2: Detalle de una reserva (boletos, pasajeros y pago)
+-- Interfaz: pantalla "Mi reserva" del cliente o mostrador de check-in, donde se
+-- escribe el número de reserva y se muestra todo lo que contiene.
+-- Por qué: el cliente o el agente de check-in necesitan ver de un vistazo todos
+-- los pasajeros, asientos, clases y el estado del pago de una reserva puntual.
+-- =========================================================================
+select
+    res.id_reserva,
+    res.estado_reserva,
+    v.fecha_vuelo,
+    v.hora_salida,
+    b.id_boleto,
+    b.nombre_viajero,
+    b.apellido_viajero,
+    b.asiento,
+    c.descripcion_clase,
+    b.precio,
+    p.metodo_pago,
+    p.estado_pago
+from reserva res
+join vuelo v on v.id_vuelo = res.id_vuelo
+join boleto b on b.id_reserva = res.id_reserva
+join clase c on c.id_clase = b.id_clase
+left join pago p on p.id_reserva = res.id_reserva
+where res.id_reserva = 15   -- parámetro: número de reserva consultado por el cliente/agente
+order by b.id_boleto;
+
+
+-- =========================================================================
+-- CONSULTA 3: Manifiesto de tripulación de un vuelo
+-- Interfaz: panel operativo que usa el personal de tierra antes de un vuelo, para
+-- verificar quién es la tripulación asignada y en qué rol.
+-- Por qué: operaciones necesita confirmar, antes de cada vuelo, que la tripulación
+-- completa (piloto, copiloto, auxiliares) está asignada y disponible.
+-- =========================================================================
+select
+    v.id_vuelo,
+    v.fecha_vuelo,
+    v.hora_salida,
+    t.nombre_tripulante,
+    t.apellido_tripulante,
+    rt.descripcion_rol_tripulante,
+    t.telefono_tripulante
+from asignacion_tripulacion at
+join vuelo v on v.id_vuelo = at.id_vuelo
+join tripulante t on t.id_tripulante = at.id_tripulante
+join rol_tripulante rt on rt.id_rol_tripulante = at.id_rol_tripulante
+where at.id_vuelo = 101   -- parámetro: vuelo que se está preparando
+order by rt.descripcion_rol_tripulante;
+
+
+-- =========================================================================
+-- CONSULTA 4: Ingresos por ruta en un periodo (dashboard gerencial)
+-- Interfaz: tablero de indicadores para la gerencia comercial, mostrando qué
+-- rutas generan más ingresos en un rango de fechas.
+-- Por qué: la gerencia necesita identificar las rutas más rentables para decidir
+-- dónde aumentar frecuencias o ajustar precios.
+-- CORRECCIÓN: solo se cuentan boletos de reservas con pago "completado"; de lo
+-- contrario se estarían sumando como ingreso reservas que nunca se pagaron o
+-- que fueron rechazadas.
+-- =========================================================================
+select
+    r.nombre_ruta,
+    count(distinct b.id_boleto) as boletos_vendidos,
+    sum(b.precio) as ingresos_totales,
+    round(avg(b.precio), 2) as precio_promedio
+from boleto b
+join reserva res on res.id_reserva = b.id_reserva
+join vuelo v on v.id_vuelo = res.id_vuelo
+join ruta r on r.id_ruta = v.id_ruta
+join pago p on p.id_reserva = res.id_reserva
+where v.fecha_vuelo between date '2026-07-01' and date '2026-07-31'  -- parámetro: rango de fechas del reporte
+  and p.estado_pago = 'completado'   -- solo se cuenta como ingreso el pago ya confirmado
+group by r.nombre_ruta
+order by ingresos_totales desc;
+
+
+-- =========================================================================
+-- CONSULTA 5: Historial de vuelos y gasto total de un cliente
+-- Interfaz: perfil del cliente / sección "Mis viajes" dentro de la app o el
+-- programa de fidelidad de la aerolínea.
+-- Por qué: permite mostrarle al cliente su historial de viajes, y a la aerolínea
+-- identificar clientes frecuentes para ofrecerles beneficios.
+-- CORRECCIÓN: al igual que en la consulta 4, solo se suma como "gasto total" el
+-- valor de boletos cuya reserva tiene un pago "completado"; así no se le muestra
+-- al cliente un gasto inflado con reservas que nunca pagó.
+-- =========================================================================
+select
+    cl.nombre_cliente,
+    cl.apellido_cliente,
+    count(distinct res.id_reserva) as reservas_pagadas,
+    count(b.id_boleto) as boletos_comprados,
+    sum(b.precio) as gasto_total
+from cliente cl
+join reserva res on res.id_cliente = cl.id_cliente
+join boleto b on b.id_reserva = res.id_reserva
+join pago p on p.id_reserva = res.id_reserva
+where cl.id_cliente = 7   -- parámetro: cliente autenticado en la app
+  and p.estado_pago = 'completado'   -- solo se cuenta el gasto ya efectivamente pagado
+group by cl.nombre_cliente, cl.apellido_cliente
+order by gasto_total desc;create table pais (
     id_pais integer default nextval('seq_pais') check (id_pais between 1 and 999),
     nombre_pais varchar(100)
 );
