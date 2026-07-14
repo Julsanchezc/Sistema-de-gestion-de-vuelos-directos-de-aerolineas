@@ -1469,8 +1469,9 @@ set search_path to aerolinea;
 
 -- =========================================================================
 -- CONSULTA 1: Buscador de vuelos disponibles
--- Interfaz: pantalla de búsqueda de vuelos que ve el cliente (ej. "Bogotá -> Medellín,
--- 20 de julio"), donde se listan los vuelos disponibles con horario, precio y cupo.
+-- Interfaz: pantalla de búsqueda de vuelos que ve el cliente (ej. "Bogotá -> San
+-- Salvador, 8 de octubre"), donde se listan los vuelos disponibles con horario,
+-- precio y cupo.
 -- Por qué: es la consulta central de cualquier aerolínea; el cliente necesita ver
 -- qué vuelos existen para una ruta/fecha, con asientos disponibles y precio.
 -- =========================================================================
@@ -1491,9 +1492,9 @@ join aeropuerto ad on ad.id_aeropuerto = r.id_destino
 join avion av on av.id_avion = v.id_avion
 left join reserva res on res.id_vuelo = v.id_vuelo
 left join boleto b on b.id_reserva = res.id_reserva
-where ao.nombre_aeropuerto = 'El Dorado'          -- parámetro: aeropuerto de origen elegido por el cliente
-  and ad.nombre_aeropuerto = 'José María Córdova'  -- parámetro: aeropuerto de destino elegido por el cliente
-  and v.fecha_vuelo = date '2026-08-20'            -- parámetro: fecha elegida por el cliente
+where ao.nombre_aeropuerto = 'Aeropuerto Internacional de Bogotá'      -- parámetro: aeropuerto de origen elegido por el cliente
+  and ad.nombre_aeropuerto = 'Aeropuerto Internacional de San Salvador' -- parámetro: aeropuerto de destino elegido por el cliente
+  and v.fecha_vuelo = date '2026-10-08'                                -- parámetro: fecha elegida por el cliente
 group by v.id_vuelo, ao.nombre_aeropuerto, ad.nombre_aeropuerto, v.fecha_vuelo,
          v.hora_salida, v.hora_llegada, r.precio_base, v.precio_ajuste, av.capacidad
 having av.capacidad - coalesce(count(b.id_boleto), 0) > 0   -- solo vuelos con cupo
@@ -1544,11 +1545,11 @@ select
     t.apellido_tripulante,
     rt.descripcion_rol_tripulante,
     t.telefono_tripulante
-from asignacion_tripulacion at
-join vuelo v on v.id_vuelo = at.id_vuelo
-join tripulante t on t.id_tripulante = at.id_tripulante
-join rol_tripulante rt on rt.id_rol_tripulante = at.id_rol_tripulante
-where at.id_vuelo = 101   -- parámetro: vuelo que se está preparando
+from asignacion_tripulacion asig
+join vuelo v on v.id_vuelo = asig.id_vuelo
+join tripulante t on t.id_tripulante = asig.id_tripulante
+join rol_tripulante rt on rt.id_rol_tripulante = asig.id_rol_tripulante
+where asig.id_vuelo = 1   -- parámetro: vuelo que se está preparando
 order by rt.descripcion_rol_tripulante;
 
 
