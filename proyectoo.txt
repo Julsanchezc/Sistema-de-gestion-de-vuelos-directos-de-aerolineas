@@ -1,0 +1,278 @@
+-- creación del schema en el que se guardan todos los datos de la tabla
+create schema aerolinea;
+
+-- indicación de que todas las tablas creadas o consultadas pertenecerán al esquema aerolinea
+set search_path to aerolinea;
+
+-- creación de las secuencias que generan automáticamente los identificadores (id) de cada tabla
+create sequence seq_pais start with 1 increment by 1;
+create sequence seq_ciudad start with 1 increment by 1;
+create sequence seq_aeropuerto start with 1 increment by 1;
+create sequence seq_ruta start with 1 increment by 1;
+create sequence seq_vuelo start with 1 increment by 1;
+create sequence seq_asignacion_tripulacion start with 1 increment by 1;
+create sequence seq_tripulante start with 1 increment by 1;
+create sequence seq_rol_tripulante start with 1 increment by 1;
+create sequence seq_avion start with 1 increment by 1;
+create sequence seq_modelo start with 1 increment by 1;
+create sequence seq_reserva start with 1 increment by 1;
+create sequence seq_pago start with 1 increment by 1;
+create sequence seq_boleto start with 1 increment by 1;
+create sequence seq_clase start with 1 increment by 1;
+create sequence seq_cliente start with 1 increment by 1;
+
+-- creación de cada tabla junto a sus atributos 
+-- el id de cada tabla toma su valor por defecto de la secuencia correspondiente
+-- pais: catálogo de países donde la aerolínea opera ciudades y aeropuertos
+create table pais (
+    id_pais integer default nextval('seq_pais') check (id_pais between 1 and 999),
+    nombre_pais varchar(100)
+);
+
+-- ciudad: ciudades que pertenecen a un país y contienen aeropuertos
+create table ciudad(
+	id_ciudad integer default nextval('seq_ciudad') check (id_ciudad between 1 and 999),
+    nombre_ciudad varchar(100) not null 
+);
+
+-- aeropuerto: aeropuertos ubicados en una ciudad; funcionan como origen/destino de rutas
+create table aeropuerto(
+	id_aeropuerto integer default nextval('seq_aeropuerto') check (id_aeropuerto between 1 and 999),
+	nombre_aeropuerto varchar (100) not null 
+);
+
+-- ruta: trayecto entre un aeropuerto de origen y uno de destino, con su precio base;
+-- una misma ruta puede tener múltiples vuelos (uno por cada fecha/horario)
+create table ruta(
+	id_ruta integer default nextval('seq_ruta') check (id_ruta between 1 and 999),
+	nombre_ruta varchar (100) not null,
+	precio_base numeric (10,2) not null
+);
+
+-- vuelo: instancia concreta de una ruta en una fecha y horario específicos, operada por un avión;
+-- fecha_vuelo se agregó para poder distinguir el mismo horario/ruta en distintos días
+-- (necesario para reservas y para evitar doble asignación de tripulación el mismo día)
+create table vuelo(
+	id_vuelo integer default nextval('seq_vuelo') check (id_vuelo between 1 and 999),
+	fecha_vuelo date not null,
+	hora_salida time not null,
+	hora_llegada time not null, 
+	precio_ajuste numeric (10,2) not null
+);
+
+-- asignacion_tripulacion: tabla intermedia que asigna un tripulante, con un rol específico, a un vuelo
+create table asignacion_tripulacion(
+	id_asignacion_tripulacion integer default nextval('seq_asignacion_tripulacion') check (id_asignacion_tripulacion between 1 and 999),
+	fecha_asignacion date not null
+);
+
+-- tripulante: empleados (pilotos, auxiliares, etc.) que pueden ser asignados a vuelos
+create table tripulante (
+	id_tripulante integer default nextval('seq_tripulante') check (id_tripulante between 1 and 999),
+	nombre_tripulante varchar (100) not null,
+	apellido_tripulante varchar (100) not null,
+	telefono_tripulante varchar (100) not null,
+	correo_tripulante varchar (100) not null,
+	fecha_ingreso_tripulante date not null,
+	fecha_salida_tripulante date,
+	estado_tripulante varchar(100) not null,
+	fecha_nacimiento_tripulante date not null
+);
+
+-- rol_tripulante: catálogo de roles que puede desempeñar un tripulante en un vuelo (piloto, copiloto, auxiliar, etc.)
+create table rol_tripulante (
+	id_rol_tripulante integer default nextval('seq_rol_tripulante') check (id_rol_tripulante between 1 and 999),
+	descripcion_rol_tripulante varchar(100) not null
+);
+
+-- avion: aeronaves de la flota, cada una asociada a un modelo, con su capacidad y estado operativo
+create table avion (
+	id_avion integer default nextval('seq_avion') check (id_avion between 1 and 999),
+	capacidad integer not null,
+	estado varchar (100) not null
+);
+
+-- modelo: catálogo de modelos de avión (ej. Boeing 737, Airbus A320) y su fabricante
+create table modelo(
+	id_modelo integer default nextval('seq_modelo') check (id_modelo between 1 and 999),
+	nombre_modelo varchar(100) not null,
+	fabricante varchar (100) not null
+);
+
+-- reserva: reserva que un cliente hace sobre un vuelo; agrupa uno o más boletos y su pago
+create table reserva (
+	id_reserva integer default nextval('seq_reserva') check (id_reserva between 1 and 999),
+	fecha_reserva date not null,
+	estado_reserva varchar(100) not null
+);
+
+-- pago: pago asociado a una reserva (monto, método y estado del pago)
+create table pago(
+	id_pago integer default nextval('seq_pago') check (id_pago between 1 and 999),
+	monto numeric (10,2) not null,
+	fecha_pago date not null,
+	metodo_pago varchar(100) not null,
+	estado_pago varchar(100) not null
+);
+
+-- boleto: boleto individual dentro de una reserva, con datos del viajero, asiento y clase de viaje
+create table boleto(
+	id_boleto integer default nextval('seq_boleto') check (id_boleto between 1 and 999),
+	asiento int not null,
+	fecha_compra date not null,
+	precio numeric (10,2) not null,
+	nombre_viajero varchar (100) not null,
+	apellido_viajero varchar(100) not null,
+	documento_viajero int not null
+);
+
+-- clase: catálogo de clases de viaje (economica, ejecutiva, primera) y su multiplicador sobre el precio base
+create table clase (
+	id_clase integer default nextval('seq_clase') check (id_clase between 1 and 999),
+	descripcion_clase varchar(100) not null,
+	multiplicador numeric(10,2) not null
+);
+
+-- cliente: personas que realizan reservas de vuelos
+create table cliente(
+	id_cliente integer default nextval('seq_cliente') check (id_cliente between 1 and 999),
+	nombre_cliente varchar(100) not null,
+	apellido_cliente varchar(100) not null,
+	telefono_cliente int not null,
+	correo_cliente varchar(100) not null
+);
+
+--alterando las tablas se asignan las llaves primarias correspondientes
+
+alter table pais 
+	add primary key (id_pais);
+
+alter table ciudad 
+	add primary key (id_ciudad);
+
+alter table aeropuerto 
+	add primary key (id_aeropuerto);
+
+alter table ruta 
+	add primary key (id_ruta);
+
+alter table vuelo
+	add primary key (id_vuelo);
+
+alter table asignacion_tripulacion 
+	add primary key (id_asignacion_tripulacion);
+
+alter table tripulante 
+	add primary key (id_tripulante);
+
+alter table rol_tripulante 
+	add primary key (id_rol_tripulante);
+
+alter table avion 
+	add primary key (id_avion);
+
+alter table modelo
+	add primary key (id_modelo);
+
+alter table reserva
+	add primary key (id_reserva);
+
+alter table pago 
+	add primary key (id_pago);
+
+alter table boleto 
+	add primary key (id_boleto);
+
+alter table clase
+	add primary key (id_clase);
+
+alter table cliente 
+	add primary key (id_cliente);
+
+--se vincula cada secuencia a la columna que la usa, para que se eliminen juntas y quede claro su propósito
+alter sequence seq_pais owned by pais.id_pais;
+alter sequence seq_ciudad owned by ciudad.id_ciudad;
+alter sequence seq_aeropuerto owned by aeropuerto.id_aeropuerto;
+alter sequence seq_ruta owned by ruta.id_ruta;
+alter sequence seq_vuelo owned by vuelo.id_vuelo;
+alter sequence seq_asignacion_tripulacion owned by asignacion_tripulacion.id_asignacion_tripulacion;
+alter sequence seq_tripulante owned by tripulante.id_tripulante;
+alter sequence seq_rol_tripulante owned by rol_tripulante.id_rol_tripulante;
+alter sequence seq_avion owned by avion.id_avion;
+alter sequence seq_modelo owned by modelo.id_modelo;
+alter sequence seq_reserva owned by reserva.id_reserva;
+alter sequence seq_pago owned by pago.id_pago;
+alter sequence seq_boleto owned by boleto.id_boleto;
+alter sequence seq_clase owned by clase.id_clase;
+alter sequence seq_cliente owned by cliente.id_cliente;
+
+--alterar las tablas y añadir las llaves foráneas correspondientes
+
+alter table ciudad 
+	add column id_pais integer check (id_pais between 1 and 999),
+	add constraint fk_ciudad_pais
+	foreign key (id_pais) REFERENCES pais (id_pais);
+
+
+alter table aeropuerto 
+	add column id_ciudad integer check (id_ciudad between 1 and 999),
+	add constraint fk_aeropuerto_ciudad
+	foreign key (id_ciudad) REFERENCES ciudad (id_ciudad);
+
+alter table ruta 
+	add column id_destino integer check (id_destino between 1 and 999),
+	add column id_origen integer check (id_origen between 1 and 999),
+	add constraint fk_ruta_aeropuerto_destino
+    foreign key (id_destino) references Aeropuerto (Id_aeropuerto),
+    add constraint fk_ruta_aeropuerto_origen
+    foreign key (id_origen) references Aeropuerto (Id_aeropuerto),
+    -- una ruta no puede tener el mismo aeropuerto como origen y destino
+    add constraint chk_ruta_origen_distinto_destino
+    check (id_origen <> id_destino);
+
+alter table vuelo
+	add column id_ruta integer check (id_ruta between 1 and 999),
+	add column id_avion integer check (id_avion between 1 and 999),
+	add constraint fk_ruta_vuelo
+	foreign key (id_ruta) REFERENCES ruta (id_ruta),
+	add constraint fk_avion_vuelo
+	foreign key (id_avion) REFERENCES avion (id_avion);
+
+alter table asignacion_tripulacion 
+	add column id_tripulante integer check (id_tripulante between 1 and 999),
+	add column id_rol_tripulante integer check (id_rol_tripulante between 1 and 999),
+	add column id_vuelo integer check (id_vuelo between 1 and 999),
+	add constraint fk_tripulante_asignacion_tripulacion
+	foreign key (id_tripulante) references tripulante (id_tripulante),
+	add constraint fk_rol_tripulante_asignacion_tripulacion 
+	foreign key (id_rol_tripulante) references rol_tripulante (id_rol_tripulante),
+	add constraint fk_vuelo_asignacion_tripulacion 
+	foreign key (id_vuelo) references vuelo (id_vuelo);
+
+alter table avion 
+	add column id_modelo integer check (id_modelo between 1 and 999),
+	add constraint fk_modelo_avion
+	foreign key (id_modelo) references modelo (id_modelo);
+
+alter table reserva
+	add column id_vuelo integer check (id_vuelo between 1 and 999),
+	add column id_cliente integer check (id_cliente between 1 and 999),
+	add constraint fk_vuelo_reserva
+	foreign key (id_vuelo) references vuelo (id_vuelo),
+	add constraint fk_cliente_reserva
+	foreign key (id_cliente) references cliente (id_cliente);
+
+alter table pago 
+	add column id_reserva integer check (id_reserva between 1 and 999),
+	add constraint fk_reserva_pago
+	foreign key (id_reserva) references reserva (id_reserva);
+
+alter table boleto 
+	add column id_reserva integer check (id_reserva between 1 and 999),
+	add column id_clase integer check (id_clase between 1 and 999),
+	add constraint fk_reserva_boleto
+	foreign key (id_reserva) references reserva (id_reserva),
+	add constraint fk_clase_boleto
+	foreign key (id_clase) references clase (id_clase);
+
+

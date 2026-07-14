@@ -1,0 +1,188 @@
+-- Script: funciones.txt
+-- Contiene las funciones PL/pgSQL que soportan las reglas de negocio del proyecto
+-- (5 reglas requeridas + 1 regla adicional sobre rutas).
+-- Debe ejecutarse DESPUES de crear el esquema, las secuencias, las tablas y las
+-- llaves foráneas (proyectoo.txt), ya que las funciones consultan esas tablas.
+
+set search_path to aerolinea;
+
+-- =========================================================================
+-- REGLA 1: un tripulante no puede tener dos asignaciones en vuelos cuyos
+-- horarios se traslapen el mismo día (no puede "estar en dos vuelos a la vez")
+-- =========================================================================
+create or replace function fn_validar_asignacion_tripulante()
+returns trigger as $$
+declare
+    v_fecha date;
+    v_salida time;
+    v_llegada time;
+    v_conflictos integer;
+begin
+    -- se obtiene fecha y horario del vuelo al que se quiere asignar el tripulante
+    select fecha_vuelo, hora_salida, hora_llegada
+    into v_fecha, v_salida, v_llegada
+    from vuelo
+    where id_vuelo = new.id_vuelo;
+
+    -- se cuentan otras asignaciones del mismo tripulante, en vuelos de la misma
+    -- fecha, cuyo horario se cruce con el del nuevo vuelo
+    select count(*)
+    into v_conflictos
+    from asignacion_tripulacion at
+    join vuelo v on v.id_vuelo = at.id_vuelo
+    where at.id_tripulante = new.id_tripulante
+      and at.id_asignacion_tripulacion <> coalesce(new.id_asignacion_tripulacion, -1)
+      and v.fecha_vuelo = v_fecha
+      and (v_salida, v_llegada) overlaps (v.hora_salida, v.hora_llegada);
+
+    if v_conflictos > 0 then
+        raise exception 'El tripulante % ya tiene una asignación en un vuelo con horario cruzado el %',
+            new.id_tripulante, v_fecha;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 2: el precio del boleto se calcula automáticamente a partir de la
+-- ruta, el ajuste del vuelo y el multiplicador de la clase; nunca se ingresa
+-- manualmente
+-- =========================================================================
+create or replace function fn_calcular_precio_boleto()
+returns trigger as $$
+declare
+    v_precio_base numeric(10,2);
+    v_precio_ajuste numeric(10,2);
+    v_multiplicador numeric(10,2);
+begin
+    select r.precio_base, v.precio_ajuste
+    into v_precio_base, v_precio_ajuste
+    from reserva res
+    join vuelo v on v.id_vuelo = res.id_vuelo
+    join ruta r on r.id_ruta = v.id_ruta
+    where res.id_reserva = new.id_reserva;
+
+    select multiplicador
+    into v_multiplicador
+    from clase
+    where id_clase = new.id_clase;
+
+    new.precio := (v_precio_base + v_precio_ajuste) * v_multiplicador;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 3: no se puede vender un boleto si ya se alcanzó la capacidad del
+-- avión asignado al vuelo (control de sobreventa)
+-- =========================================================================
+create or replace function fn_validar_capacidad_avion()
+returns trigger as $$
+declare
+    v_id_vuelo integer;
+    v_capacidad integer;
+    v_boletos_vendidos integer;
+begin
+    select res.id_vuelo
+    into v_id_vuelo
+    from reserva res
+    where res.id_reserva = new.id_reserva;
+
+    select av.capacidad
+    into v_capacidad
+    from vuelo v
+    join avion av on av.id_avion = v.id_avion
+    where v.id_vuelo = v_id_vuelo;
+
+    select count(*)
+    into v_boletos_vendidos
+    from boleto b
+    join reserva res on res.id_reserva = b.id_reserva
+    where res.id_vuelo = v_id_vuelo;
+
+    if v_boletos_vendidos >= v_capacidad then
+        raise exception 'No hay cupo disponible: el avión del vuelo % ya alcanzó su capacidad de % asientos',
+            v_id_vuelo, v_capacidad;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 4: al registrarse o actualizarse un pago, el estado de la reserva
+-- se actualiza automáticamente según el estado del pago
+-- =========================================================================
+create or replace function fn_actualizar_estado_reserva()
+returns trigger as $$
+begin
+    if new.estado_pago = 'completado' then
+        update reserva
+        set estado_reserva = 'confirmada'
+        where id_reserva = new.id_reserva;
+    elsif new.estado_pago = 'rechazado' then
+        update reserva
+        set estado_reserva = 'pendiente'
+        where id_reserva = new.id_reserva;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 5: no se puede crear una reserva sobre un vuelo cuya fecha ya pasó
+-- =========================================================================
+create or replace function fn_validar_fecha_vuelo_reserva()
+returns trigger as $$
+declare
+    v_fecha_vuelo date;
+begin
+    select fecha_vuelo
+    into v_fecha_vuelo
+    from vuelo
+    where id_vuelo = new.id_vuelo;
+
+    if v_fecha_vuelo < current_date then
+        raise exception 'No se puede reservar el vuelo %: la fecha del vuelo (%) ya pasó',
+            new.id_vuelo, v_fecha_vuelo;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+
+
+-- =========================================================================
+-- REGLA 6 (adicional): una ruta no puede tener origen y destino en la misma
+-- ciudad, aunque sean aeropuertos distintos (ej. dos aeropuertos de Bogotá)
+-- =========================================================================
+create or replace function fn_validar_ciudades_ruta()
+returns trigger as $$
+declare
+    v_ciudad_origen integer;
+    v_ciudad_destino integer;
+begin
+    select id_ciudad into v_ciudad_origen
+    from aeropuerto
+    where id_aeropuerto = new.id_origen;
+
+    select id_ciudad into v_ciudad_destino
+    from aeropuerto
+    where id_aeropuerto = new.id_destino;
+
+    if v_ciudad_origen = v_ciudad_destino then
+        raise exception 'La ruta % no es válida: el aeropuerto de origen (%) y el de destino (%) están en la misma ciudad',
+            new.id_ruta, new.id_origen, new.id_destino;
+    end if;
+
+    return new;
+end;
+$$ language plpgsql;
+

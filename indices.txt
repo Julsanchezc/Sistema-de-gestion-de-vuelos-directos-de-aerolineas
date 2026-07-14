@@ -1,0 +1,45 @@
+-- Script: indices.txt
+-- Proyecto: Sistema de Gestión de Vuelos Directos de Aerolíneas (SGVDA)
+-- Índices adicionales sobre columnas de llaves foráneas y columnas que se filtran
+-- u ordenan con frecuencia en las consultas del negocio (ver consultas.txt).
+-- Debe ejecutarse DESPUES de proyectoo.txt (las tablas ya deben existir).
+--
+-- Nota: las llaves primarias ya tienen un índice único automático creado por
+-- PostgreSQL; estos índices adicionales son sobre columnas de llave foránea
+-- (que PostgreSQL NO indexa automáticamente) y sobre columnas usadas en
+-- filtros/joins frecuentes.
+
+set search_path to aerolinea;
+
+-- ===== Búsqueda de vuelos (consulta 1): por ruta, fecha y avión =====
+-- fecha_vuelo se filtra y se ordena en casi cualquier búsqueda de vuelos
+create index idx_vuelo_fecha on vuelo (fecha_vuelo);
+create index idx_vuelo_ruta on vuelo (id_ruta);
+create index idx_vuelo_avion on vuelo (id_avion);
+
+-- ===== Aeropuertos y rutas: joins de origen/destino =====
+create index idx_aeropuerto_ciudad on aeropuerto (id_ciudad);
+create index idx_aeropuerto_nombre on aeropuerto (nombre_aeropuerto);
+create index idx_ruta_origen on ruta (id_origen);
+create index idx_ruta_destino on ruta (id_destino);
+create index idx_ciudad_pais on ciudad (id_pais);
+
+-- ===== Reservas (consultas 2 y 5): por cliente y por vuelo =====
+create index idx_reserva_cliente on reserva (id_cliente);
+create index idx_reserva_vuelo on reserva (id_vuelo);
+create index idx_reserva_estado on reserva (estado_reserva);
+
+-- ===== Boletos (consultas 2 y 4): por reserva y por clase =====
+create index idx_boleto_reserva on boleto (id_reserva);
+create index idx_boleto_clase on boleto (id_clase);
+
+-- ===== Pagos (consultas 4 y 5, y el trigger de la regla 4): por reserva y estado =====
+create index idx_pago_reserva on pago (id_reserva);
+create index idx_pago_estado on pago (estado_pago);
+
+-- ===== Tripulación (consulta 3, y el trigger de la regla 1): por vuelo y tripulante =====
+create index idx_asignacion_vuelo on asignacion_tripulacion (id_vuelo);
+create index idx_asignacion_tripulante on asignacion_tripulacion (id_tripulante);
+
+-- ===== Aviones: por modelo (usado al validar capacidad, regla 3) =====
+create index idx_avion_modelo on avion (id_modelo);
