@@ -33,10 +33,12 @@
 -- de componentes), respetar este mismo orden: proyectoo -> indices -> funciones
 -- -> triggers -> llenado_datos -> consultas.
 --
--- NOTA DE CORRECCIÓN: telefono_cliente y documento_viajero se definieron como
--- bigint (no integer) porque un número celular o documento de 10 dígitos supera
--- el límite de un integer de PostgreSQL (2.147.483.647) y producía el error
--- "22003 integer out of range" al cargar los datos de prueba.
+-- NOTA: telefono_cliente y documento_viajero usan bigint (no integer) porque
+-- superan el límite de un integer en PostgreSQL.
+--
+-- NOTA: los 60 registros de datos de prueba (llenado_datos.txt) se generaron
+-- con apoyo de IA para agilizar el llenado masivo; el diseño del esquema,
+-- las funciones, los triggers y las consultas son trabajo propio.
 -- =============================================================================
 
 -- =============================================================================
@@ -585,8 +587,6 @@ for each row
 execute function fn_calcular_precio_boleto();
 
 -- REGLA 3: valida capacidad del avión antes de insertar el boleto
--- (se ejecuta después de trg_calcular_precio_boleto por orden alfabético de nombre;
--- si se requiere un orden estricto, se puede renombrar el trigger)
 create trigger trg_validar_capacidad_avion
 before insert on boleto
 for each row
@@ -615,16 +615,13 @@ execute function fn_validar_ciudades_ruta();
 -- =============================================================================
 
 -- Script: llenado_datos.txt
--- Datos de prueba para el esquema aerolinea.
--- 60 registros por tabla, excepto rol_tripulante (6) y clase (4), que son
--- catálogos con un número de valores naturalmente pequeño y fijo en la vida real
--- (el enunciado permite menos de 30/60 registros 'en donde sea posible').
--- Debe ejecutarse DESPUES de proyectoo.txt y funciones.txt/triggers.txt, en ese
--- orden, ya que varios triggers (precio del boleto, capacidad del avión, estado
--- de la reserva) se disparan durante estos inserts.
--- Los id_* no se especifican: cada tabla los genera automáticamente con su
--- secuencia (nextval), por lo que quedan asignados en el mismo orden de inserción
--- (1, 2, 3, ... N), que es el que se usa aquí para las llaves foráneas.
+-- Datos de prueba para el esquema aerolinea: 60 registros por tabla, excepto
+-- rol_tripulante (6) y clase (4), catálogos de tamaño naturalmente pequeño.
+-- Generados con apoyo de IA para agilizar el llenado masivo.
+-- Debe ejecutarse DESPUES de proyectoo.txt y funciones.txt/triggers.txt, ya
+-- que varios triggers se disparan durante estos inserts.
+-- Los id_* se asignan automáticamente por secuencia (1, 2, 3... N) en el mismo
+-- orden de inserción, que es el que se usa aquí para las llaves foráneas.
 
 set search_path to aerolinea;
 
@@ -1469,11 +1466,8 @@ set search_path to aerolinea;
 
 -- =========================================================================
 -- CONSULTA 1: Buscador de vuelos disponibles
--- Interfaz: pantalla de búsqueda de vuelos que ve el cliente (ej. "Bogotá -> San
--- Salvador, 8 de octubre"), donde se listan los vuelos disponibles con horario,
--- precio y cupo.
--- Por qué: es la consulta central de cualquier aerolínea; el cliente necesita ver
--- qué vuelos existen para una ruta/fecha, con asientos disponibles y precio.
+-- Interfaz: búsqueda de vuelos del cliente (origen, destino, fecha), con
+-- horario, precio y cupo disponible.
 -- =========================================================================
 select
     v.id_vuelo,
@@ -1503,10 +1497,7 @@ order by v.hora_salida;
 
 -- =========================================================================
 -- CONSULTA 2: Detalle de una reserva (boletos, pasajeros y pago)
--- Interfaz: pantalla "Mi reserva" del cliente o mostrador de check-in, donde se
--- escribe el número de reserva y se muestra todo lo que contiene.
--- Por qué: el cliente o el agente de check-in necesitan ver de un vistazo todos
--- los pasajeros, asientos, clases y el estado del pago de una reserva puntual.
+-- Interfaz: pantalla "Mi reserva" / check-in, buscando por número de reserva.
 -- =========================================================================
 select
     res.id_reserva,
@@ -1532,10 +1523,8 @@ order by b.id_boleto;
 
 -- =========================================================================
 -- CONSULTA 3: Manifiesto de tripulación de un vuelo
--- Interfaz: panel operativo que usa el personal de tierra antes de un vuelo, para
--- verificar quién es la tripulación asignada y en qué rol.
--- Por qué: operaciones necesita confirmar, antes de cada vuelo, que la tripulación
--- completa (piloto, copiloto, auxiliares) está asignada y disponible.
+-- Interfaz: panel operativo de tierra, para confirmar tripulación y rol antes
+-- de cada vuelo.
 -- =========================================================================
 select
     v.id_vuelo,
@@ -1555,13 +1544,9 @@ order by rt.descripcion_rol_tripulante;
 
 -- =========================================================================
 -- CONSULTA 4: Ingresos por ruta en un periodo (dashboard gerencial)
--- Interfaz: tablero de indicadores para la gerencia comercial, mostrando qué
--- rutas generan más ingresos en un rango de fechas.
--- Por qué: la gerencia necesita identificar las rutas más rentables para decidir
--- dónde aumentar frecuencias o ajustar precios.
--- CORRECCIÓN: solo se cuentan boletos de reservas con pago "completado"; de lo
--- contrario se estarían sumando como ingreso reservas que nunca se pagaron o
--- que fueron rechazadas.
+-- Interfaz: tablero de rutas más rentables en un rango de fechas.
+-- Solo se cuentan boletos con pago "completado", para no inflar ingresos
+-- con reservas nunca pagadas o rechazadas.
 -- =========================================================================
 select
     r.nombre_ruta,
@@ -1581,13 +1566,9 @@ order by ingresos_totales desc;
 
 -- =========================================================================
 -- CONSULTA 5: Historial de vuelos y gasto total de un cliente
--- Interfaz: perfil del cliente / sección "Mis viajes" dentro de la app o el
--- programa de fidelidad de la aerolínea.
--- Por qué: permite mostrarle al cliente su historial de viajes, y a la aerolínea
--- identificar clientes frecuentes para ofrecerles beneficios.
--- CORRECCIÓN: al igual que en la consulta 4, solo se suma como "gasto total" el
--- valor de boletos cuya reserva tiene un pago "completado"; así no se le muestra
--- al cliente un gasto inflado con reservas que nunca pagó.
+-- Interfaz: perfil del cliente / "Mis viajes" o programa de fidelidad.
+-- Igual que en la consulta 4, solo se suma el gasto de reservas con pago
+-- "completado".
 -- =========================================================================
 select
     cl.nombre_cliente,
