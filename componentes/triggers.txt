@@ -1,0 +1,43 @@
+-- Script: triggers.txt
+-- Contiene los triggers que activan las funciones definidas en funciones.txt.
+-- Debe ejecutarse DESPUES de proyectoo.txt (esquema/tablas) y funciones.txt.
+
+set search_path to aerolinea;
+
+-- REGLA 1: valida traslape de horario antes de insertar o modificar una asignación
+create trigger trg_validar_asignacion_tripulante
+before insert or update on asignacion_tripulacion
+for each row
+execute function fn_validar_asignacion_tripulante();
+
+-- REGLA 2: calcula el precio del boleto antes de insertarlo
+create trigger trg_calcular_precio_boleto
+before insert on boleto
+for each row
+execute function fn_calcular_precio_boleto();
+
+-- REGLA 3: valida capacidad del avión antes de insertar el boleto
+-- (se ejecuta después de trg_calcular_precio_boleto por orden alfabético de nombre;
+-- si se requiere un orden estricto, se puede renombrar el trigger)
+create trigger trg_validar_capacidad_avion
+before insert on boleto
+for each row
+execute function fn_validar_capacidad_avion();
+
+-- REGLA 4: actualiza el estado de la reserva cuando cambia el estado del pago
+create trigger trg_actualizar_estado_reserva
+after insert or update on pago
+for each row
+execute function fn_actualizar_estado_reserva();
+
+-- REGLA 5: valida que el vuelo de la reserva no tenga fecha pasada
+create trigger trg_validar_fecha_vuelo_reserva
+before insert on reserva
+for each row
+execute function fn_validar_fecha_vuelo_reserva();
+
+-- REGLA 6 (adicional): valida que origen y destino de una ruta no sean la misma ciudad
+create trigger trg_validar_ciudades_ruta
+before insert or update on ruta
+for each row
+execute function fn_validar_ciudades_ruta();
