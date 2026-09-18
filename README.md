@@ -32,11 +32,126 @@ aerolínea: rutas, vuelos, tripulación, flota, reservas, pagos y boletos.
 
 ## Diagrama Entidad-Relación y Modelo Relacional
 
-<p align="center">
-  <img src="./diagrama_er.png" alt="Diagrama Entidad-Relación SGVDA" width="850">
-</p>
+```mermaid
+erDiagram
+    PAIS ||--o{ CIUDAD : "contiene"
+    CIUDAD ||--o{ AEROPUERTO : "alberga"
+    AEROPUERTO ||--o{ RUTA : "origen"
+    AEROPUERTO ||--o{ RUTA : "destino"
+    RUTA ||--o{ VUELO : "programa"
+    MODELO ||--o{ AVION : "define"
+    AVION ||--o{ VUELO : "opera"
+    VUELO ||--o{ ASIGNACION_TRIPULACION : "asigna"
+    TRIPULANTE ||--o{ ASIGNACION_TRIPULACION : "participa"
+    ROL_TRIPULANTE ||--o{ ASIGNACION_TRIPULACION : "desempena"
+    CLIENTE ||--o{ RESERVA : "realiza"
+    VUELO ||--o{ RESERVA : "corresponde"
+    RESERVA ||--o{ PAGO : "liquida"
+    RESERVA ||--o{ BOLETO : "incluye"
+    CLASE ||--o{ BOLETO : "tarifica"
 
-> 💡 **Nota:** También puedes consultar el diagrama vectorial dinámico en formato [Mermaid interactivo dentro de la documentación técnica](./documentacion_proyecto.md#2-diagrama-entidad-relación-y-modelo-relacional) o abrir el archivo vectorial [SVG](./diagrama_er.svg).
+    PAIS {
+        integer id_pais PK
+        varchar nombre_pais
+    }
+    CIUDAD {
+        integer id_ciudad PK
+        varchar nombre_ciudad
+        integer id_pais FK
+    }
+    AEROPUERTO {
+        integer id_aeropuerto PK
+        varchar nombre_aeropuerto
+        integer id_ciudad FK
+    }
+    RUTA {
+        integer id_ruta PK
+        varchar nombre_ruta
+        numeric precio_base
+        integer id_origen FK
+        integer id_destino FK
+    }
+    MODELO {
+        integer id_modelo PK
+        varchar nombre_modelo
+        varchar fabricante
+    }
+    AVION {
+        integer id_avion PK
+        integer capacidad
+        varchar estado
+        integer id_modelo FK
+    }
+    VUELO {
+        integer id_vuelo PK
+        date fecha_vuelo
+        time hora_salida
+        time hora_llegada
+        numeric precio_ajuste
+        integer id_ruta FK
+        integer id_avion FK
+    }
+    ROL_TRIPULANTE {
+        integer id_rol_tripulante PK
+        varchar descripcion_rol_tripulante
+    }
+    TRIPULANTE {
+        integer id_tripulante PK
+        varchar nombre_tripulante
+        varchar apellido_tripulante
+        varchar telefono_tripulante
+        varchar correo_tripulante
+        date fecha_ingreso_tripulante
+        date fecha_salida_tripulante
+        varchar estado_tripulante
+        date fecha_nacimiento_tripulante
+    }
+    ASIGNACION_TRIPULACION {
+        integer id_asignacion_tripulacion PK
+        date fecha_asignacion
+        integer id_tripulante FK
+        integer id_rol_tripulante FK
+        integer id_vuelo FK
+    }
+    CLIENTE {
+        integer id_cliente PK
+        varchar nombre_cliente
+        varchar apellido_cliente
+        bigint telefono_cliente
+        varchar correo_cliente
+    }
+    RESERVA {
+        integer id_reserva PK
+        date fecha_reserva
+        varchar estado_reserva
+        integer id_vuelo FK
+        integer id_cliente FK
+    }
+    PAGO {
+        integer id_pago PK
+        numeric monto
+        date fecha_pago
+        varchar metodo_pago
+        varchar estado_pago
+        integer id_reserva FK
+    }
+    CLASE {
+        integer id_clase PK
+        varchar descripcion_clase
+        numeric multiplicador
+    }
+    BOLETO {
+        integer id_boleto PK
+        integer asiento
+        date fecha_compra
+        numeric precio
+        varchar nombre_viajero
+        integer id_reserva FK
+        integer id_clase FK
+    }
+```
+
+> 💡 **Archivos descargables del diagrama:** [diagrama_er.png (Imagen HD con fondo blanco)](./diagrama_er.png) · [diagrama_er.svg (Vectorial)](./diagrama_er.svg) · [Documentación detallada](./documentacion_proyecto.md)
 
 ## Orden de ejecución
 
