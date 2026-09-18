@@ -23,10 +23,20 @@ aerolínea: rutas, vuelos, tripulación, flota, reservas, pagos y boletos.
 │   └── consultas.txt           # 5 consultas DQL que soportan interfaces de usuario reales
 ├── script_general.txt          # TODO lo anterior unido, en orden, con guía de ejecución
 ├── documentacion_proyecto.md   # documentación detallada del modelo y decisiones de diseño
-├── diagrama_er.*                # diagrama Entidad-Relación
-├── diagrama_relacional.*        # diagrama Relacional
+├── diagrama_er.png             # imagen en alta resolución del diagrama E-R
+├── diagrama_er.svg             # diagrama vectorial escalable
+├── diagrama_relacional.png     # diagrama del modelo relacional normalizado
+├── diagrama_relacional.svg     # diagrama relacional en formato SVG
 └── README.md                    # este archivo
 ```
+
+## Diagrama Entidad-Relación y Modelo Relacional
+
+<p align="center">
+  <img src="./diagrama_er.png" alt="Diagrama Entidad-Relación SGVDA" width="850">
+</p>
+
+> 💡 **Nota:** También puedes consultar el diagrama vectorial dinámico en formato [Mermaid interactivo dentro de la documentación técnica](./documentacion_proyecto.md#2-diagrama-entidad-relación-y-modelo-relacional) o abrir el archivo vectorial [SVG](./diagrama_er.svg).
 
 ## Orden de ejecución
 
