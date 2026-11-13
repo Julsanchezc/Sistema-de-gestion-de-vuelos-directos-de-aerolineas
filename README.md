@@ -1,14 +1,38 @@
-# Sistema de Gestión de Vuelos Directos de Aerolíneas (SGVDA)
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Sistema de Gestión de Vuelos Directos de Aerolíneas" width="100%">
+</p>
 
-Proyecto final del curso de Bases de Datos — Universidad Nacional de Colombia,
-Facultad de Ingeniería.
+<p align="center">
+  <img src="https://img.shields.io/badge/PostgreSQL-14+-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/PL/pgSQL-Triggers-336791?style=for-the-badge" alt="PL/pgSQL">
+  <img src="https://img.shields.io/badge/Modelo-E--R-6366F1?style=for-the-badge" alt="Modelo">
+  <img src="https://img.shields.io/badge/UNAL-Bases%20de%20Datos-0F766E?style=for-the-badge" alt="UNAL">
+</p>
 
-**Autores:**
+# ✈️ Sistema de Gestión de Vuelos Directos de Aerolíneas (SGVDA)
+
+Base de datos relacional en **PostgreSQL** que modela la operación completa de una aerolínea de vuelos directos: infraestructura (países, ciudades, aeropuertos y rutas), flota (modelos y aviones), tripulación y su asignación a vuelos, y el ciclo comercial (clientes, reservas, boletos por clase tarifaria y pagos).
+
+Proyecto final de **Bases de Datos · Universidad Nacional de Colombia, Facultad de Ingeniería**.
+
+## ✨ Lo más destacado
+
+- 🗂️ **15 tablas normalizadas** en un esquema dedicado (`aerolinea`), con llaves primarias, foráneas y constraints de integridad.
+- ⚙️ **6 reglas de negocio** implementadas en la base de datos con funciones **PL/pgSQL** y **triggers**: cálculo automático del precio del boleto, control de capacidad del avión, validación de cruces de horario de la tripulación y más.
+- ⚡ **Índices** sobre llaves foráneas y columnas de filtro frecuente.
+- 🔍 **5 consultas DQL** diseñadas para interfaces reales: buscador de vuelos, detalle de reserva, manifiesto de tripulación, dashboard de ingresos por ruta e historial de cliente.
+- 🧪 **Datos de prueba** (60 registros por tabla) que además validan que los triggers funcionan al cargarse.
+
+<p align="center">
+  <img src="diagrama_relacional.png" alt="Modelo relacional" width="70%">
+</p>
+
+## 👥 Autores
+
 - Michelle Alejandra Gómez Sánchez
-- Julián Santiago Sánchez Castro
+- **Julián Santiago Sánchez Castro**
 
-Base de datos relacional en PostgreSQL para gestionar las operaciones de una
-aerolínea: rutas, vuelos, tripulación, flota, reservas, pagos y boletos.
+---
 
 ## Estructura del repositorio
 
